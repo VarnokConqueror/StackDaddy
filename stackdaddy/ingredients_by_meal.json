@@ -1,0 +1,14 @@
+{
+  "Veggie Omelette": ["eggs", "milk", "spinach", "bell pepper", "onion", "cheddar cheese"],
+  "Protein Smoothie": ["banana", "frozen berries", "protein powder", "almond milk", "chia seeds"],
+  "Grilled Cheese & Tomato Soup": ["bread", "cheddar cheese", "butter", "tomato soup can"],
+  "Avocado Toast": ["bread", "avocado", "lemon juice", "red pepper flakes"],
+  "Lentil Stew": ["lentils", "carrots", "celery", "onion", "garlic", "vegetable broth", "tomato paste"],
+  "Chicken Stir Fry": ["chicken breast", "soy sauce", "ginger", "garlic", "broccoli", "carrot", "rice"],
+  "Tuna Salad": ["canned tuna", "mayonnaise", "celery", "red onion", "lettuce", "bread"],
+  "Spaghetti Night": ["spaghetti", "pasta sauce", "ground beef", "onion", "garlic", "parmesan"],
+  "Breakfast Burrito": ["eggs", "cheddar cheese", "tortilla", "black beans", "salsa", "spinach"],
+  "Greek Yogurt Bowl": ["greek yogurt", "granola", "honey", "berries", "chia seeds"],
+  "Caesar Salad": ["romaine", "croutons", "parmesan", "caesar dressing", "chicken breast"],
+  "Mac & Cheese": ["elbow macaroni", "milk", "cheddar cheese", "butter", "flour"]
+}

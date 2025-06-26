@@ -1,0 +1,217 @@
+[
+  {
+    "name": "Chickpea Salad Wraps",
+    "ingredients": [
+      "1 can chickpeas",
+      "1/4 cup mayo or Greek yogurt",
+      "1 tbsp Dijon mustard",
+      "1/2 red onion, chopped",
+      "1 stalk celery, chopped",
+      "Salt",
+      "Pepper",
+      "Wraps or tortillas"
+    ]
+  },
+  {
+    "name": "Vegetable Stir-Fry with Rice",
+    "ingredients": [
+      "2 cups mixed frozen stir-fry vegetables",
+      "2 tbsp soy sauce",
+      "1 tbsp sesame oil",
+      "1 tbsp minced garlic",
+      "1 tsp ginger",
+      "2 cups cooked rice"
+    ]
+  },
+  {
+    "name": "Lentil Soup",
+    "ingredients": [
+      "1 cup dry lentils",
+      "1 onion, diced",
+      "2 carrots, chopped",
+      "2 stalks celery, chopped",
+      "4 cups vegetable broth",
+      "1 tsp thyme",
+      "Salt",
+      "Pepper"
+    ]
+  },
+  {
+    "name": "Instant Pot Mac & Cheese",
+    "ingredients": [
+      "2 cups elbow macaroni",
+      "2 cups shredded cheddar cheese",
+      "1/2 cup milk",
+      "2 tbsp butter",
+      "Salt",
+      "Pepper"
+    ]
+  },
+  {
+    "name": "Air Fryer Tofu & Broccoli",
+    "ingredients": [
+      "1 block tofu",
+      "2 cups broccoli florets",
+      "2 tbsp soy sauce",
+      "1 tbsp olive oil",
+      "1 tbsp cornstarch"
+    ]
+  },
+  {
+    "name": "Breakfast-for-Dinner Omelets",
+    "ingredients": [
+      "6 eggs",
+      "1/2 cup shredded cheese",
+      "1/2 bell pepper, diced",
+      "1/4 onion, diced",
+      "Salt",
+      "Pepper"
+    ]
+  },
+  {
+    "name": "Peanut Noodles",
+    "ingredients": [
+      "8 oz spaghetti or rice noodles",
+      "2 tbsp peanut butter",
+      "1 tbsp soy sauce",
+      "1 tbsp rice vinegar",
+      "1 tbsp honey or sugar",
+      "1/2 tsp garlic powder"
+    ]
+  },
+  {
+    "name": "Instant Pot Veggie Chili",
+    "ingredients": [
+      "1 can kidney beans",
+      "1 can black beans",
+      "1 can diced tomatoes",
+      "1 onion, chopped",
+      "1 bell pepper, chopped",
+      "1 tbsp chili powder",
+      "1 tsp cumin"
+    ]
+  },
+  {
+    "name": "Air Fryer Grilled Cheese & Soup",
+    "ingredients": [
+      "Bread slices",
+      "Cheddar cheese",
+      "Butter or mayo",
+      "1 can tomato soup"
+    ]
+  },
+  {
+    "name": "Stuffed Sweet Potatoes",
+    "ingredients": [
+      "3 sweet potatoes",
+      "1 can black beans",
+      "1/2 cup corn",
+      "1/4 cup salsa",
+      "1/2 tsp cumin"
+    ]
+  },
+  {
+    "name": "Avocado Toast with Eggs",
+    "ingredients": [
+      "Bread slices",
+      "2 avocados",
+      "4 eggs",
+      "Salt",
+      "Pepper",
+      "Red chili flakes (optional)"
+    ]
+  },
+  {
+    "name": "Minestrone Soup (Instant Pot)",
+    "ingredients": [
+      "1 can diced tomatoes",
+      "1 cup pasta",
+      "1 zucchini, chopped",
+      "1 carrot, chopped",
+      "1 can white beans",
+      "4 cups broth",
+      "1 tsp Italian seasoning"
+    ]
+  },
+  {
+    "name": "Air Fryer Veggie Quesadillas",
+    "ingredients": [
+      "Tortillas",
+      "1 cup shredded cheese",
+      "1 bell pepper, sliced",
+      "1/2 onion, sliced",
+      "1 tbsp oil"
+    ]
+  },
+  {
+    "name": "Egg Fried Rice",
+    "ingredients": [
+      "2 cups cooked rice",
+      "2 eggs",
+      "1/2 cup frozen peas & carrots",
+      "2 tbsp soy sauce",
+      "1 tbsp oil"
+    ]
+  },
+  {
+    "name": "Microwave Baked Potatoes with Fixings",
+    "ingredients": [
+      "3 russet potatoes",
+      "Shredded cheese",
+      "Sour cream or Greek yogurt",
+      "Green onions"
+    ]
+  },
+  {
+    "name": "Stovetop Tomato Pasta",
+    "ingredients": [
+      "8 oz pasta",
+      "1 can crushed tomatoes",
+      "1 tbsp olive oil",
+      "2 cloves garlic",
+      "1 tsp basil",
+      "Salt",
+      "Pepper"
+    ]
+  },
+  {
+    "name": "Instant Pot Thai Curry",
+    "ingredients": [
+      "1 can coconut milk",
+      "2 tbsp red curry paste",
+      "1 cup chopped vegetables (zucchini, bell pepper, etc.)",
+      "1 block tofu",
+      "2 cups cooked rice"
+    ]
+  },
+  {
+    "name": "Grilled Peanut Butter & Banana Sandwiches",
+    "ingredients": [
+      "Bread slices",
+      "Peanut butter",
+      "2 bananas",
+      "Butter or oil for grilling"
+    ]
+  },
+  {
+    "name": "Cheesy Broccoli Rice Casserole (Stovetop)",
+    "ingredients": [
+      "2 cups cooked rice",
+      "2 cups broccoli, chopped",
+      "1 cup shredded cheese",
+      "1/2 cup milk",
+      "Salt",
+      "Pepper"
+    ]
+  },
+  {
+    "name": "Air Fryer Falafel Pitas",
+    "ingredients": [
+      "Store-bought or premade falafel",
+      "Pita bread",
+      "Lettuce",
+      "Tomato",
+      "Hummus or tahini"
+    ]
+  }
+]
