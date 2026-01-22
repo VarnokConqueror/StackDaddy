@@ -54,6 +54,8 @@ class UserResponse(BaseModel):
     subscription_end_date: Optional[str] = None
     dietary_preferences: List[str] = []
     cooking_methods: List[str] = []
+    oauth_provider: Optional[str] = None
+    picture_url: Optional[str] = None
 
 class TokenResponse(BaseModel):
     token: str
