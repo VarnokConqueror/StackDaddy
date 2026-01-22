@@ -47,6 +47,31 @@ function App() {
     return user ? children : <Navigate to="/login" />;
   };
 
+  // Check for OAuth callback during render (not in useEffect to avoid race conditions)
+  function AppRouter() {
+    const location = useLocation();
+    if (location.hash?.includes('session_id=')) {
+      return <AuthCallback />;
+    }
+    
+    return (
+      <Routes>
+        <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
+        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setUser={setUser} />} />
+        <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register setUser={setUser} />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard user={user} /></ProtectedRoute>} />
+        <Route path="/meal-planner" element={<ProtectedRoute><MealPlanner user={user} /></ProtectedRoute>} />
+        <Route path="/shopping-list" element={<ProtectedRoute><ShoppingList user={user} /></ProtectedRoute>} />
+        <Route path="/supplements" element={<ProtectedRoute><SupplementLibrary user={user} /></ProtectedRoute>} />
+        <Route path="/my-supplements" element={<ProtectedRoute><MySupplements user={user} /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile user={user} setUser={setUser} /></ProtectedRoute>} />
+        <Route path="/subscription" element={<ProtectedRoute><Subscription user={user} /></ProtectedRoute>} />
+        <Route path="/subscription/success" element={<ProtectedRoute><SubscriptionSuccess user={user} setUser={setUser} /></ProtectedRoute>} />
+      </Routes>
+    );
+  }
+
   if (loading) {
     return <div className="min-h-screen bg-obsidian flex items-center justify-center"><div className="text-zinc-400">Loading...</div></div>;
   }
@@ -54,19 +79,7 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
-          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setUser={setUser} />} />
-          <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register setUser={setUser} />} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard user={user} /></ProtectedRoute>} />
-          <Route path="/meal-planner" element={<ProtectedRoute><MealPlanner user={user} /></ProtectedRoute>} />
-          <Route path="/shopping-list" element={<ProtectedRoute><ShoppingList user={user} /></ProtectedRoute>} />
-          <Route path="/supplements" element={<ProtectedRoute><SupplementLibrary user={user} /></ProtectedRoute>} />
-          <Route path="/my-supplements" element={<ProtectedRoute><MySupplements user={user} /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><Profile user={user} setUser={setUser} /></ProtectedRoute>} />
-          <Route path="/subscription" element={<ProtectedRoute><Subscription user={user} /></ProtectedRoute>} />
-          <Route path="/subscription/success" element={<ProtectedRoute><SubscriptionSuccess user={user} setUser={setUser} /></ProtectedRoute>} />
-        </Routes>
+        <AppRouter />
       </BrowserRouter>
       <Toaster position="top-right" />
     </div>
