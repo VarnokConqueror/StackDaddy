@@ -320,6 +320,297 @@ async def update_preferences(
     
     return {"message": "Preferences updated"}
 
+# ============== OAuth Routes ==============
+
+class OAuthSessionRequest(BaseModel):
+    session_id: str
+
+class OAuthCallbackData(BaseModel):
+    provider: str
+    id_token: Optional[str] = None
+    access_token: Optional[str] = None
+    user_data: Optional[Dict[str, Any]] = None
+
+async def verify_emergent_google_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Verify Google OAuth session via Emergent"""
+    try:
+        response = requests.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": session_id},
+            timeout=10
+        )
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception as e:
+        logging.error(f"Emergent Google session verification failed: {e}")
+        return None
+
+async def verify_apple_token(id_token: str) -> Optional[Dict[str, Any]]:
+    """Verify Apple ID token - Phase 2"""
+    # Placeholder for Apple Sign-In verification
+    # Will be implemented when Apple credentials are provided
+    apple_team_id = os.environ.get('APPLE_TEAM_ID')
+    if not apple_team_id:
+        return None
+    # TODO: Implement Apple token verification with apple-signin-auth library
+    return None
+
+async def verify_facebook_token(access_token: str) -> Optional[Dict[str, Any]]:
+    """Verify Facebook access token - Phase 2"""
+    # Placeholder for Facebook token verification
+    # Will be implemented when Facebook credentials are provided
+    facebook_app_id = os.environ.get('FACEBOOK_APP_ID')
+    facebook_app_secret = os.environ.get('FACEBOOK_APP_SECRET')
+    
+    if not facebook_app_id or not facebook_app_secret:
+        return None
+    
+    try:
+        # Verify token
+        verify_response = requests.get(
+            "https://graph.facebook.com/debug_token",
+            params={
+                "input_token": access_token,
+                "access_token": f"{facebook_app_id}|{facebook_app_secret}"
+            },
+            timeout=10
+        )
+        verify_data = verify_response.json()
+        
+        if not verify_data.get("data", {}).get("is_valid"):
+            return None
+        
+        # Get user info
+        user_response = requests.get(
+            "https://graph.facebook.com/me",
+            params={
+                "fields": "id,name,email,picture",
+                "access_token": access_token
+            },
+            timeout=10
+        )
+        user_data = user_response.json()
+        
+        if "error" in user_data:
+            return None
+        
+        return {
+            "provider_id": user_data["id"],
+            "email": user_data.get("email"),
+            "name": user_data.get("name"),
+            "picture": user_data.get("picture", {}).get("data", {}).get("url")
+        }
+    except Exception as e:
+        logging.error(f"Facebook token verification failed: {e}")
+        return None
+
+@api_router.post("/auth/oauth/google")
+async def google_oauth_session(request: OAuthSessionRequest):
+    """Handle Emergent Google OAuth session exchange"""
+    session_data = await verify_emergent_google_session(request.session_id)
+    
+    if not session_data:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    session_token = session_data.get("session_token")
+    email = session_data.get("email")
+    name = session_data.get("name")
+    picture = session_data.get("picture")
+    provider_id = session_data.get("id")
+    
+    # Check if user exists with this OAuth provider
+    existing_user = await db.users.find_one({
+        "oauth_provider": "google",
+        "oauth_id": provider_id
+    }, {"_id": 0})
+    
+    if existing_user:
+        # Update session token
+        await db.user_sessions.update_one(
+            {"user_id": existing_user["id"]},
+            {
+                "$set": {
+                    "session_token": session_token,
+                    "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            },
+            upsert=True
+        )
+        
+        user_response = UserResponse(**existing_user)
+        token = create_access_token({"sub": existing_user["id"]})
+        
+        return {
+            "token": token,
+            "session_token": session_token,
+            "user": user_response
+        }
+    
+    # Check if email exists (account linking)
+    existing_email = await db.users.find_one({"email": email}, {"_id": 0})
+    
+    if existing_email:
+        # Link OAuth to existing account
+        await db.users.update_one(
+            {"id": existing_email["id"]},
+            {
+                "$set": {
+                    "oauth_provider": "google",
+                    "oauth_id": provider_id,
+                    "picture_url": picture
+                }
+            }
+        )
+        
+        await db.user_sessions.update_one(
+            {"user_id": existing_email["id"]},
+            {
+                "$set": {
+                    "session_token": session_token,
+                    "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            },
+            upsert=True
+        )
+        
+        user_response = UserResponse(**existing_email)
+        token = create_access_token({"sub": existing_email["id"]})
+        
+        return {
+            "token": token,
+            "session_token": session_token,
+            "user": user_response
+        }
+    
+    # Create new user
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": email,
+        "name": name,
+        "oauth_provider": "google",
+        "oauth_id": provider_id,
+        "picture_url": picture,
+        "subscription_status": "inactive",
+        "subscription_end_date": None,
+        "dietary_preferences": [],
+        "cooking_methods": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create session
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    user_response = UserResponse(**user_doc)
+    token = create_access_token({"sub": user_id})
+    
+    return {
+        "token": token,
+        "session_token": session_token,
+        "user": user_response
+    }
+
+@api_router.post("/auth/oauth/callback")
+async def oauth_callback(callback_data: OAuthCallbackData):
+    """Unified OAuth callback handler for Apple and Facebook - Phase 2"""
+    provider = callback_data.provider
+    
+    if provider == "apple":
+        if not callback_data.id_token:
+            raise HTTPException(status_code=400, detail="Apple ID token required")
+        
+        verified_data = await verify_apple_token(callback_data.id_token)
+        if not verified_data:
+            raise HTTPException(status_code=401, detail="Apple Sign-In not configured. Please add Apple credentials.")
+    
+    elif provider == "facebook":
+        if not callback_data.access_token:
+            raise HTTPException(status_code=400, detail="Facebook access token required")
+        
+        verified_data = await verify_facebook_token(callback_data.access_token)
+        if not verified_data:
+            raise HTTPException(status_code=401, detail="Facebook Login not configured. Please add Facebook credentials.")
+    
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
+    
+    # Create or link user (similar to Google flow)
+    provider_id = verified_data["provider_id"]
+    email = verified_data.get("email")
+    name = verified_data.get("name", "User")
+    picture = verified_data.get("picture")
+    
+    existing_user = await db.users.find_one({
+        "oauth_provider": provider,
+        "oauth_id": provider_id
+    }, {"_id": 0})
+    
+    if existing_user:
+        user_response = UserResponse(**existing_user)
+        token = create_access_token({"sub": existing_user["id"]})
+        return {"token": token, "user": user_response}
+    
+    # Check email for account linking
+    if email:
+        existing_email = await db.users.find_one({"email": email}, {"_id": 0})
+        if existing_email:
+            await db.users.update_one(
+                {"id": existing_email["id"]},
+                {
+                    "$set": {
+                        "oauth_provider": provider,
+                        "oauth_id": provider_id,
+                        "picture_url": picture
+                    }
+                }
+            )
+            user_response = UserResponse(**existing_email)
+            token = create_access_token({"sub": existing_email["id"]})
+            return {"token": token, "user": user_response}
+    
+    # Create new user
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": email or f"{provider}_{provider_id}@conquerorcourt.app",
+        "name": name,
+        "oauth_provider": provider,
+        "oauth_id": provider_id,
+        "picture_url": picture,
+        "subscription_status": "inactive",
+        "subscription_end_date": None,
+        "dietary_preferences": [],
+        "cooking_methods": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    user_response = UserResponse(**user_doc)
+    token = create_access_token({"sub": user_id})
+    
+    return {"token": token, "user": user_response}
+
+@api_router.get("/auth/oauth/status")
+async def get_oauth_status():
+    """Check which OAuth providers are configured"""
+    return {
+        "google": True,  # Always available via Emergent
+        "apple": bool(os.environ.get('APPLE_TEAM_ID')),
+        "facebook": bool(os.environ.get('FACEBOOK_APP_ID') and os.environ.get('FACEBOOK_APP_SECRET'))
+    }
+
+
 # ============== Meal Routes ==============
 
 @api_router.post("/meals", response_model=Meal)
