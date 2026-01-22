@@ -619,7 +619,14 @@ async def get_ai_config(authorization: str = Header(None)):
             "api_key": None
         }
         await db.ai_configs.insert_one(config_doc)
-        config = config_doc
+        # Return without _id
+        config = {
+            "id": config_id,
+            "user_id": user["id"],
+            "provider": "openai",
+            "model": "gpt-5.2",
+            "api_key": None
+        }
     
     return config
 
