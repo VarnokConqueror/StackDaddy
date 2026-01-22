@@ -44,6 +44,17 @@ function Login({ setUser }) {
         </div>
 
         <div className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-8">
+          <SocialAuthButtons />
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-zinc-800" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-zinc-950 text-zinc-500">Or continue with email</span>
+            </div>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-6" data-testid="login-form">
             <div>
               <Label htmlFor="email" className="text-zinc-300 mb-2 block">EMAIL</Label>
