@@ -1,0 +1,116 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "Conqueror's Court",
+      "vibe": "Regal, Futuristic, Dark, Powerful, Ritualistic",
+      "principles": [
+        "Dark Mode First: The app lives in the shadows. Light is used only to guide.",
+        "Sharp Hierarchy: Information is ranked ruthlessly. No clutter.",
+        "Purple & Pink Haze: Use these accents like neon lights in a dark room.",
+        "Ritual-Tech: It's not just a tracker; it's a command center for the body."
+      ]
+    },
+    "typography": {
+      "font_family": {
+        "headings": "Cinzel, serif",
+        "body": "Manrope, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "instructions": "Import 'Cinzel' and 'Manrope' from Google Fonts in index.css. Use Cinzel for all H1-H3 headings to give the 'Court' vibe. Use Manrope for H4-H6 and body text for readability.",
+      "scale": {
+        "h1": "text-5xl md:text-7xl font-black tracking-tighter uppercase",
+        "h2": "text-3xl md:text-5xl font-bold tracking-tight",
+        "h3": "text-2xl font-semibold tracking-wide",
+        "body": "text-base leading-relaxed text-zinc-400"
+      }
+    },
+    "colors": {
+      "palette": {
+        "background": "#050505",
+        "surface": "#0A0A0A",
+        "surface_highlight": "#121212",
+        "border": "#27272A",
+        "primary": "#7C3AED",
+        "primary_glow": "rgba(124, 58, 237, 0.5)",
+        "secondary": "#DB2777",
+        "secondary_glow": "rgba(219, 39, 119, 0.5)",
+        "accent": "#D97706",
+        "text_primary": "#FAFAFA",
+        "text_secondary": "#A1A1AA",
+        "success": "#10B981",
+        "error": "#EF4444"
+      },
+      "usage": {
+        "gradients": {
+          "primary": "bg-gradient-to-r from-violet-600 to-pink-600",
+          "surface": "bg-gradient-to-b from-zinc-900 to-black",
+          "glow": "bg-gradient-to-tr from-violet-500/20 via-pink-500/10 to-transparent"
+        }
+      }
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-violet-600 hover:bg-violet-700 text-white rounded-none uppercase tracking-widest font-bold px-8 py-4 transition-all duration-300 hover:shadow-[0_0_20px_rgba(124,58,237,0.5)]",
+        "secondary": "bg-transparent border border-zinc-700 hover:border-pink-500 text-zinc-300 hover:text-pink-500 rounded-none uppercase tracking-widest px-8 py-4 transition-all duration-300",
+        "ghost": "text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-none"
+      },
+      "cards": {
+        "base": "bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 rounded-none p-6 hover:border-violet-500/30 transition-colors duration-300",
+        "highlight": "bg-zinc-900/80 border border-violet-500/20 rounded-none p-6 shadow-[0_0_30px_rgba(124,58,237,0.1)]"
+      },
+      "inputs": {
+        "base": "bg-zinc-950 border-zinc-800 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 rounded-none h-12 text-zinc-100 placeholder:text-zinc-600"
+      }
+    },
+    "layout": {
+      "spacing": {
+        "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+        "section": "py-24 md:py-32"
+      },
+      "grid": {
+        "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6",
+        "features": "grid grid-cols-1 md:grid-cols-3 gap-8"
+      }
+    },
+    "visual_enhancers": {
+      "glassmorphism": "backdrop-blur-2xl bg-black/40 border border-white/10",
+      "neon_glow": "shadow-[0_0_15px_rgba(139,92,246,0.3)]",
+      "particles": "Use tsparticles or framer-motion for subtle floating dust in the background."
+    },
+    "motion": {
+      "library": "framer-motion",
+      "instructions": "Use 'AnimatePresence' for page transitions. Elements should fade in and slide up (y: 20 -> y: 0). Hover states should be snappy (duration: 0.2).",
+      "variants": {
+        "fadeInUp": {
+          "initial": { "opacity": 0, "y": 20 },
+          "animate": { "opacity": 1, "y": 0 },
+          "transition": { "duration": 0.5, "ease": "easeOut" }
+        }
+      }
+    },
+    "assets": {
+      "images": {
+        "hero_bg": "https://images.unsplash.com/photo-1572494880689-5b006a51f72b",
+        "abstract_bg": "https://images.unsplash.com/photo-1633786207050-e1e183d06217",
+        "supplement_bottle": "https://images.unsplash.com/photo-1701056035575-8d345d9b52a4",
+        "meal_placeholder": "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&q=80"
+      },
+      "icons": "lucide-react"
+    }
+  },
+  "implementation_steps": [
+    "1. Install fonts: Add Cinzel and Manrope to index.css via @import.",
+    "2. Configure Tailwind: Update tailwind.config.js with the new color palette and font families.",
+    "3. Global Styles: Apply the dark background (#050505) and text color (#FAFAFA) in index.css.",
+    "4. Component Overrides: Customize Shadcn components (Button, Card, Input) in their respective files to match the 'rounded-none' and 'border-zinc-800' style.",
+    "5. Layout: Build the Dashboard using the Bento Grid strategy defined in the guidelines.",
+    "6. Motion: Wrap page content in Framer Motion components for entrance animations."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for text unless it's a very large headline.",
+    "Avoid rounded corners > 4px. Keep it sharp.",
+    "Use 'violet-500' for primary actions and 'pink-500' for secondary highlights.",
+    "Ensure all text has sufficient contrast against the dark background.",
+    "Use 'sonner' for all toast notifications."
+  ]
+}
