@@ -1233,122 +1233,330 @@ async def update_ai_config(config_data: AIConfigUpdate, authorization: str = Hea
 
 # ============== Subscription Routes ==============
 
-SUBSCRIPTION_PACKAGES = {
-    "monthly": 9.99,
-    "yearly": 99.99
+# Initialize Stripe with API key
+stripe.api_key = os.environ.get('STRIPE_API_KEY')
+
+# Stripe Price IDs for recurring subscriptions
+# These should be created in Stripe Dashboard or via API
+STRIPE_PRICES = {
+    "monthly": {
+        "amount": 999,  # $9.99 in cents
+        "interval": "month",
+        "name": "Monthly Premium"
+    },
+    "yearly": {
+        "amount": 9999,  # $99.99 in cents
+        "interval": "year",
+        "name": "Yearly Premium"
+    }
 }
+
+async def get_or_create_stripe_price(package_id: str) -> str:
+    """Get existing price or create new one for subscription"""
+    package = STRIPE_PRICES.get(package_id)
+    if not package:
+        raise HTTPException(status_code=400, detail="Invalid package")
+    
+    # Check if we have a cached price ID
+    cached_price = await db.stripe_prices.find_one({"package_id": package_id}, {"_id": 0})
+    if cached_price:
+        return cached_price["price_id"]
+    
+    try:
+        # Create a product first
+        product = stripe.Product.create(
+            name=f"Conqueror's Court {package['name']}",
+            description=f"Premium subscription - {package['name']}"
+        )
+        
+        # Create recurring price
+        price = stripe.Price.create(
+            product=product.id,
+            unit_amount=package["amount"],
+            currency="usd",
+            recurring={"interval": package["interval"]}
+        )
+        
+        # Cache the price ID
+        await db.stripe_prices.insert_one({
+            "package_id": package_id,
+            "price_id": price.id,
+            "product_id": product.id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return price.id
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe error creating price: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create subscription price")
 
 @api_router.post("/subscriptions/checkout")
 async def create_checkout(checkout_req: CheckoutRequest, authorization: str = Header(None)):
+    """Create Stripe Checkout session for recurring subscription"""
     user = await get_current_user(authorization)
     
-    if checkout_req.package_id not in SUBSCRIPTION_PACKAGES:
+    if checkout_req.package_id not in STRIPE_PRICES:
         raise HTTPException(status_code=400, detail="Invalid package")
     
-    amount = SUBSCRIPTION_PACKAGES[checkout_req.package_id]
-    
-    success_url = f"{checkout_req.origin_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{checkout_req.origin_url}/subscription"
-    
-    stripe_api_key = os.environ.get('STRIPE_API_KEY')
-    webhook_url = f"{checkout_req.origin_url}/api/webhook/stripe"
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
-    
-    request_data = CheckoutSessionRequest(
-        amount=amount,
-        currency="usd",
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={
+    try:
+        # Get or create the recurring price
+        price_id = await get_or_create_stripe_price(checkout_req.package_id)
+        
+        # Check if user already has a Stripe customer ID
+        stripe_customer_id = user.get("stripe_customer_id")
+        
+        if not stripe_customer_id:
+            # Create Stripe customer
+            customer = stripe.Customer.create(
+                email=user["email"],
+                name=user.get("name", ""),
+                metadata={"user_id": user["id"]}
+            )
+            stripe_customer_id = customer.id
+            
+            # Save customer ID to user
+            await db.users.update_one(
+                {"id": user["id"]},
+                {"$set": {"stripe_customer_id": stripe_customer_id}}
+            )
+        
+        # Create checkout session for subscription
+        success_url = f"{checkout_req.origin_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = f"{checkout_req.origin_url}/subscription"
+        
+        session = stripe.checkout.Session.create(
+            customer=stripe_customer_id,
+            payment_method_types=["card"],
+            line_items=[{
+                "price": price_id,
+                "quantity": 1
+            }],
+            mode="subscription",
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={
+                "user_id": user["id"],
+                "package_id": checkout_req.package_id
+            }
+        )
+        
+        # Record the transaction
+        transaction_doc = {
+            "id": str(uuid.uuid4()),
             "user_id": user["id"],
+            "session_id": session.id,
+            "amount": STRIPE_PRICES[checkout_req.package_id]["amount"] / 100,
+            "currency": "usd",
             "package_id": checkout_req.package_id,
-            "email": user["email"]
+            "payment_status": "pending",
+            "subscription_mode": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
-    )
-    
-    session = await stripe_checkout.create_checkout_session(request_data)
-    
-    transaction_doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "session_id": session.session_id,
-        "amount": amount,
-        "currency": "usd",
-        "package_id": checkout_req.package_id,
-        "payment_status": "pending",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.payment_transactions.insert_one(transaction_doc)
-    
-    return {"url": session.url, "session_id": session.session_id}
+        await db.payment_transactions.insert_one(transaction_doc)
+        
+        return {"url": session.url, "session_id": session.id}
+        
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe checkout error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/subscriptions/status/{session_id}")
 async def check_subscription_status(session_id: str, authorization: str = Header(None)):
+    """Check the status of a checkout session"""
     user = await get_current_user(authorization)
     
-    stripe_api_key = os.environ.get('STRIPE_API_KEY')
-    webhook_url = f"{os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        
+        transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+        
+        # If subscription is active and not yet processed
+        if session.status == "complete" and session.payment_status == "paid":
+            if transaction and transaction["payment_status"] != "completed":
+                # Get subscription details
+                subscription = stripe.Subscription.retrieve(session.subscription)
+                
+                # Update user subscription
+                await db.users.update_one(
+                    {"id": user["id"]},
+                    {"$set": {
+                        "subscription_status": "active",
+                        "subscription_id": session.subscription,
+                        "subscription_end_date": datetime.fromtimestamp(
+                            subscription.current_period_end, tz=timezone.utc
+                        ).isoformat()
+                    }}
+                )
+                
+                # Update transaction
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id},
+                    {"$set": {
+                        "payment_status": "completed",
+                        "subscription_id": session.subscription
+                    }}
+                )
+        
+        return {
+            "status": session.status,
+            "payment_status": session.payment_status,
+            "amount": session.amount_total,
+            "currency": session.currency
+        }
+        
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe status check error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/subscriptions/cancel")
+async def cancel_subscription(authorization: str = Header(None)):
+    """Cancel user's active subscription"""
+    user = await get_current_user(authorization)
     
-    status = await stripe_checkout.get_checkout_status(session_id)
+    subscription_id = user.get("subscription_id")
+    if not subscription_id:
+        raise HTTPException(status_code=400, detail="No active subscription found")
     
-    transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-    
-    if status.payment_status == "paid" and transaction and transaction["payment_status"] != "completed":
-        days_to_add = 30 if transaction["package_id"] == "monthly" else 365
-        end_date = datetime.now(timezone.utc) + timedelta(days=days_to_add)
+    try:
+        # Cancel at period end (user keeps access until end of billing period)
+        subscription = stripe.Subscription.modify(
+            subscription_id,
+            cancel_at_period_end=True
+        )
         
         await db.users.update_one(
             {"id": user["id"]},
-            {"$set": {
-                "subscription_status": "active",
-                "subscription_end_date": end_date.isoformat()
-            }}
+            {"$set": {"subscription_cancel_at_period_end": True}}
         )
         
-        await db.payment_transactions.update_one(
-            {"session_id": session_id},
-            {"$set": {"payment_status": "completed"}}
-        )
+        return {
+            "message": "Subscription will be cancelled at the end of the billing period",
+            "cancel_at": datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc).isoformat()
+        }
+        
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe cancel error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/subscriptions/details")
+async def get_subscription_details(authorization: str = Header(None)):
+    """Get user's subscription details"""
+    user = await get_current_user(authorization)
     
-    return {
-        "status": status.status,
-        "payment_status": status.payment_status,
-        "amount": status.amount_total,
-        "currency": status.currency
-    }
+    subscription_id = user.get("subscription_id")
+    if not subscription_id:
+        return {
+            "status": "inactive",
+            "message": "No active subscription"
+        }
+    
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        
+        return {
+            "status": subscription.status,
+            "current_period_end": datetime.fromtimestamp(
+                subscription.current_period_end, tz=timezone.utc
+            ).isoformat(),
+            "cancel_at_period_end": subscription.cancel_at_period_end,
+            "plan": subscription.items.data[0].price.recurring.interval if subscription.items.data else None
+        }
+        
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe details error: {e}")
+        return {
+            "status": "error",
+            "message": "Could not fetch subscription details"
+        }
 
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events for subscription lifecycle"""
     body = await request.body()
     signature = request.headers.get("Stripe-Signature")
-    
-    stripe_api_key = os.environ.get('STRIPE_API_KEY')
-    webhook_url = f"{os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=stripe_api_key, webhook_url=webhook_url)
+    webhook_secret = os.environ.get('STRIPE_WEBHOOK_SECRET')
     
     try:
-        webhook_response = await stripe_checkout.handle_webhook(body, signature)
+        if webhook_secret:
+            event = stripe.Webhook.construct_event(body, signature, webhook_secret)
+        else:
+            # For testing without webhook secret
+            import json
+            event = stripe.Event.construct_from(json.loads(body), stripe.api_key)
         
-        if webhook_response.payment_status == "paid":
-            metadata = webhook_response.metadata
-            user_id = metadata.get("user_id")
-            package_id = metadata.get("package_id")
-            
-            if user_id and package_id:
-                days_to_add = 30 if package_id == "monthly" else 365
-                end_date = datetime.now(timezone.utc) + timedelta(days=days_to_add)
-                
+        event_type = event.type
+        data = event.data.object
+        
+        logging.info(f"Stripe webhook received: {event_type}")
+        
+        if event_type == "checkout.session.completed":
+            # Initial subscription created
+            user_id = data.metadata.get("user_id")
+            if user_id and data.subscription:
+                subscription = stripe.Subscription.retrieve(data.subscription)
                 await db.users.update_one(
                     {"id": user_id},
                     {"$set": {
                         "subscription_status": "active",
-                        "subscription_end_date": end_date.isoformat()
+                        "subscription_id": data.subscription,
+                        "subscription_end_date": datetime.fromtimestamp(
+                            subscription.current_period_end, tz=timezone.utc
+                        ).isoformat()
+                    }}
+                )
+        
+        elif event_type == "invoice.paid":
+            # Recurring payment successful
+            subscription_id = data.subscription
+            if subscription_id:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                customer = stripe.Customer.retrieve(data.customer)
+                user_id = customer.metadata.get("user_id")
+                
+                if user_id:
+                    await db.users.update_one(
+                        {"id": user_id},
+                        {"$set": {
+                            "subscription_status": "active",
+                            "subscription_end_date": datetime.fromtimestamp(
+                                subscription.current_period_end, tz=timezone.utc
+                            ).isoformat()
+                        }}
+                    )
+        
+        elif event_type == "invoice.payment_failed":
+            # Payment failed
+            subscription_id = data.subscription
+            if subscription_id:
+                customer = stripe.Customer.retrieve(data.customer)
+                user_id = customer.metadata.get("user_id")
+                
+                if user_id:
+                    await db.users.update_one(
+                        {"id": user_id},
+                        {"$set": {"subscription_status": "past_due"}}
+                    )
+        
+        elif event_type == "customer.subscription.deleted":
+            # Subscription cancelled
+            customer = stripe.Customer.retrieve(data.customer)
+            user_id = customer.metadata.get("user_id")
+            
+            if user_id:
+                await db.users.update_one(
+                    {"id": user_id},
+                    {"$set": {
+                        "subscription_status": "inactive",
+                        "subscription_id": None,
+                        "subscription_end_date": None
                     }}
                 )
         
         return {"status": "success"}
+        
+    except stripe.error.SignatureVerificationError as e:
+        logging.error(f"Webhook signature verification failed: {e}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:
         logging.error(f"Webhook error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
