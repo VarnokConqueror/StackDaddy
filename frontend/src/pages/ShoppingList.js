@@ -4,7 +4,7 @@ import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ShoppingCart, Download } from 'lucide-react';
+import { ShoppingCart, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -17,6 +17,7 @@ function ShoppingList({ user }) {
   const [selectedPlan, setSelectedPlan] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [checkedItems, setCheckedItems] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -61,6 +62,25 @@ function ShoppingList({ user }) {
     }
   };
 
+  const toggleItem = (listId, itemIndex) => {
+    const key = `${listId}-${itemIndex}`;
+    setCheckedItems(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const groupByCategory = (items) => {
+    const grouped = {};
+    items.forEach((item, idx) => {
+      if (!grouped[item.category]) {
+        grouped[item.category] = [];
+      }
+      grouped[item.category].push({ ...item, originalIndex: idx });
+    });
+    return grouped;
+  };
+
   return (
     <div className="min-h-screen bg-obsidian" data-testid="shopping-list-page">
       <Navigation user={user} />
@@ -72,7 +92,7 @@ function ShoppingList({ user }) {
           className="mb-8"
         >
           <h1 className="text-4xl font-cinzel font-black uppercase mb-2">SHOPPING LIST</h1>
-          <p className="text-zinc-400">Generate shopping lists from your meal plans</p>
+          <p className="text-zinc-400">Generate and manage your shopping lists from meal plans</p>
         </motion.div>
 
         <div className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-6 mb-6">
@@ -85,7 +105,7 @@ function ShoppingList({ user }) {
               <SelectContent className="bg-zinc-900 border-zinc-800">
                 {mealPlans.map((plan) => (
                   <SelectItem key={plan.id} value={plan.id}>
-                    {plan.plan_type.charAt(0).toUpperCase() + plan.plan_type.slice(1)} Plan - {new Date(plan.created_at).toLocaleDateString()}
+                    Weekly Plan - {new Date(plan.created_at).toLocaleDateString()}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -111,39 +131,73 @@ function ShoppingList({ user }) {
           </div>
         ) : (
           <div className="space-y-6">
-            {shoppingLists.map((list, index) => (
-              <motion.div
-                key={list.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-6"
-                data-testid={`shopping-list-${list.id}`}
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-xl font-cinzel font-semibold">Shopping List</h3>
-                    <p className="text-sm text-zinc-500">{new Date(list.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <Button variant="outline" className="border-zinc-700 hover:border-violet-500">
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {list.items.map((item, itemIndex) => (
-                    <div key={itemIndex} className="flex items-center space-x-3 p-3 bg-zinc-900/50 border border-zinc-800">
-                      <Checkbox data-testid={`item-checkbox-${itemIndex}`} />
-                      <div className="flex-1">
-                        <p className="text-zinc-100 font-medium">{item.name}</p>
-                        <p className="text-sm text-zinc-500">{item.quantity} {item.unit}</p>
-                      </div>
+            {shoppingLists.map((list, index) => {
+              const groupedItems = groupByCategory(list.items);
+              
+              return (
+                <motion.div
+                  key={list.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-6"
+                  data-testid={`shopping-list-${list.id}`}
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-cinzel font-semibold">Shopping List</h3>
+                      <p className="text-sm text-zinc-500">{new Date(list.created_at).toLocaleDateString()}</p>
                     </div>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
+                    <div className="text-sm text-zinc-400">
+                      {Object.values(checkedItems).filter(v => v).length} / {list.items.length} items checked
+                    </div>
+                  </div>
+
+                  {/* Show items grouped by category */}
+                  <div className="space-y-6">
+                    {Object.entries(groupedItems).map(([category, items]) => (
+                      <div key={category}>
+                        <h4 className="text-lg font-semibold text-violet-400 mb-3 uppercase tracking-wider">
+                          {category}
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {items.map((item) => {
+                            const checkKey = `${list.id}-${item.originalIndex}`;
+                            const isChecked = checkedItems[checkKey] || false;
+                            
+                            return (
+                              <div 
+                                key={item.originalIndex} 
+                                className={`flex items-center space-x-3 p-3 bg-zinc-900/50 border transition-all duration-200 ${
+                                  isChecked ? 'border-green-500/50 opacity-50' : 'border-zinc-800'
+                                }`}
+                              >
+                                <Checkbox 
+                                  checked={isChecked}
+                                  onCheckedChange={() => toggleItem(list.id, item.originalIndex)}
+                                  data-testid={`item-checkbox-${item.originalIndex}`}
+                                />
+                                <div className="flex-1">
+                                  <p className={`text-zinc-100 font-medium ${isChecked ? 'line-through' : ''}`}>
+                                    {item.name}
+                                  </p>
+                                  <p className="text-sm text-zinc-500">
+                                    {item.quantity} {item.unit}
+                                  </p>
+                                </div>
+                                {isChecked && (
+                                  <Check className="w-5 h-5 text-green-500" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>
