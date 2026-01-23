@@ -198,7 +198,7 @@ function Pantry({ user }) {
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-zinc-400">Loading...</div>
+          <div className="text-center py-12 text-zinc-400 italic">Consulting the royal inventory...</div>
         ) : items.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -206,11 +206,11 @@ function Pantry({ user }) {
             className="text-center py-24"
           >
             <Package className="w-20 h-20 text-zinc-700 mx-auto mb-6" />
-            <h2 className="text-2xl font-cinzel font-bold text-zinc-400 mb-2">PANTRY IS EMPTY</h2>
-            <p className="text-zinc-500 mb-6">Add your spices, oils, and staples to track what you have</p>
+            <h2 className="text-2xl font-cinzel font-bold text-zinc-400 mb-2">THE STORES ARE BARE</h2>
+            <p className="text-zinc-500 mb-6 italic">Your royal pantry awaits its first provisions</p>
             <Button onClick={openAddDialog} className="bg-violet-600 hover:bg-violet-700">
               <Plus className="w-4 h-4 mr-2" />
-              ADD YOUR FIRST ITEM
+              STOCK THE PANTRY
             </Button>
           </motion.div>
         ) : (
