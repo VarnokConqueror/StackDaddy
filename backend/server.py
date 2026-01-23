@@ -825,6 +825,14 @@ async def get_meal(meal_id: str, authorization: str = Header(None)):
 
 # ============== Meal Plan Routes ==============
 
+# Default meal times
+DEFAULT_MEAL_TIMES = {
+    "breakfast": "8:00 AM",
+    "lunch": "12:30 PM", 
+    "dinner": "6:30 PM",
+    "snack": "3:00 PM"
+}
+
 @api_router.post("/meal-plans", response_model=MealPlan)
 async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Header(None)):
     user = await get_current_user(authorization)
@@ -837,7 +845,15 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     
     plan_days = [
-        {"day": day, "meals": {"breakfast": None, "lunch": None, "dinner": None, "snack": None}, "instructions": {}, "recipes": {}, "locked": False}
+        {
+            "day": day, 
+            "meals": {"breakfast": None, "lunch": None, "dinner": None, "snack": None}, 
+            "meal_times": DEFAULT_MEAL_TIMES.copy(),
+            "is_leftover": {"breakfast": False, "lunch": False, "dinner": False, "snack": False},
+            "instructions": {}, 
+            "recipes": {}, 
+            "locked": False
+        }
         for day in days
     ]
     
@@ -845,6 +861,8 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
     dietary_prefs = plan_data.dietary_preferences if plan_data.dietary_preferences else user.get("dietary_preferences", [])
     cooking_methods = plan_data.cooking_methods if plan_data.cooking_methods else user.get("cooking_methods", [])
     goal = plan_data.goal if plan_data.goal else user.get("health_goal")
+    servings = plan_data.servings
+    use_leftovers = plan_data.use_leftovers
     
     ai_suggestions_raw = None
     
