@@ -121,6 +121,31 @@ function MealPlanner({ user }) {
     setDeleteDialogOpen(true);
   };
 
+  const regeneratePlan = async () => {
+    if (!selectedPlan) return;
+    
+    setRegenerating(true);
+    const token = localStorage.getItem('token');
+    
+    try {
+      const response = await axios.post(`${API}/meal-plans/${selectedPlan.id}/regenerate`, {
+        extra_restriction: extraRestriction.trim() || null
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      toast.success('Plan regenerated with your restrictions!');
+      setRegenerateDialogOpen(false);
+      setExtraRestriction('');
+      setSelectedPlan(response.data);
+      fetchMealPlans();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to regenerate plan');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   const viewPlan = (plan) => {
     setSelectedPlan(plan);
     setViewDialogOpen(true);
