@@ -1026,6 +1026,78 @@ async def get_supplement_logs(authorization: str = Header(None)):
     logs = await db.supplement_logs.find({"user_id": user["id"]}, {"_id": 0}).sort("taken_at", -1).to_list(1000)
     return [SupplementLog(**log) for log in logs]
 
+# ============== AI Supplement Recommendations ==============
+
+@api_router.post("/supplements/ai-recommend")
+async def ai_recommend_supplements(
+    goal: str,
+    authorization: str = Header(None)
+):
+    """AI-powered supplement recommendations based on health goals"""
+    user = await get_current_user(authorization)
+    
+    ai_config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not ai_config or not ai_config.get("api_key"):
+        raise HTTPException(status_code=400, detail="AI configuration required. Please add API key in Profile settings.")
+    
+    # Get all available supplements
+    all_supplements = await db.supplements.find({}, {"_id": 0}).to_list(1000)
+    supp_names = [s["name"] for s in all_supplements]
+    
+    goal_map = {
+        "lose_weight": "weight loss, fat burning, metabolism boost",
+        "gain_weight": "healthy weight gain, muscle building, calorie increase",
+        "gain_muscle": "muscle growth, strength, recovery, protein synthesis",
+        "eat_healthy": "overall health, wellness, nutritional balance",
+        "increase_energy": "energy boost, reduce fatigue, vitality",
+        "improve_digestion": "digestive health, gut health, nutrient absorption",
+        "better_sleep": "sleep quality, relaxation, recovery",
+        "reduce_stress": "stress management, mood support, mental clarity",
+        "boost_immunity": "immune system support, illness prevention",
+        "joint_health": "joint support, flexibility, inflammation reduction"
+    }
+    
+    goal_description = goal_map.get(goal, "general wellness")
+    
+    try:
+        chat = LlmChat(
+            api_key=ai_config["api_key"],
+            session_id=f"supp_recommend_{user['id']}",
+            system_message="You are an expert nutritionist and supplement advisor. Recommend evidence-based supplements."
+        ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
+        
+        prompt = f"""Based on the health goal of "{goal_description}", recommend 5-8 supplements from this list:
+{', '.join(supp_names)}
+
+For each recommendation, provide:
+1. Supplement name (must match exactly from the list)
+2. Why it helps with {goal_description}
+3. Suggested daily dose
+4. Best time to take it
+
+Format as JSON:
+{{
+  "recommendations": [
+    {{
+      "name": "Supplement Name",
+      "reason": "Why it helps",
+      "suggested_dose": "Amount",
+      "timing": "When to take"
+    }}
+  ]
+}}"""
+        
+        response = await chat.send_message(UserMessage(text=prompt))
+        
+        return {
+            "goal": goal,
+            "recommendations": response,
+            "available_supplements": supp_names
+        }
+    except Exception as e:
+        logging.error(f"AI supplement recommendation error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate recommendations")
+
 # ============== AI Config Routes ==============
 
 @api_router.get("/ai-config")
