@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ShoppingCart, Check, Trash2, RefreshCw, Calendar } from 'lucide-react';
+import { ShoppingCart, Check, Trash2, RefreshCw, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -23,6 +23,14 @@ const CATEGORY_ORDER = [
   'Other'
 ];
 
+// Capitalize first letter of each word
+const capitalize = (str) => {
+  if (!str) return '';
+  return str.split(' ').map(word => 
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+};
+
 function ShoppingList({ user }) {
   const [mealPlans, setMealPlans] = useState([]);
   const [shoppingLists, setShoppingLists] = useState([]);
@@ -32,6 +40,7 @@ function ShoppingList({ user }) {
   const [checkedItems, setCheckedItems] = useState({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [listToDelete, setListToDelete] = useState(null);
+  const [expandedList, setExpandedList] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -46,6 +55,11 @@ function ShoppingList({ user }) {
       ]);
       setMealPlans(plansRes.data);
       setShoppingLists(listsRes.data);
+      
+      // Auto-expand the first list if there's only one
+      if (listsRes.data.length === 1) {
+        setExpandedList(listsRes.data[0].id);
+      }
     } catch (error) {
       toast.error('Failed to load data');
     } finally {
@@ -74,12 +88,13 @@ function ShoppingList({ user }) {
     const token = localStorage.getItem('token');
     
     try {
-      await axios.post(`${API}/shopping-lists?meal_plan_id=${selectedPlan}`, {}, {
+      const response = await axios.post(`${API}/shopping-lists?meal_plan_id=${selectedPlan}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       toast.success('Shopping list generated!');
       setSelectedPlan('');
+      setExpandedList(response.data.id); // Auto-expand the new list
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to generate shopping list');
@@ -99,6 +114,9 @@ function ShoppingList({ user }) {
       toast.success('Shopping list deleted');
       setDeleteDialogOpen(false);
       setListToDelete(null);
+      if (expandedList === listToDelete) {
+        setExpandedList(null);
+      }
       fetchData();
     } catch (error) {
       toast.error('Failed to delete shopping list');
@@ -115,6 +133,10 @@ function ShoppingList({ user }) {
 
   const getCheckedCount = (listId, items) => {
     return items.filter((_, idx) => checkedItems[`${listId}-${idx}`]).length;
+  };
+
+  const toggleExpand = (listId) => {
+    setExpandedList(expandedList === listId ? null : listId);
   };
 
   const groupByCategory = (items) => {
@@ -233,11 +255,12 @@ function ShoppingList({ user }) {
             </p>
           </motion.div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-4">
             {shoppingLists.map((list, index) => {
               const groupedItems = groupByCategory(list.items);
               const checkedCount = getCheckedCount(list.id, list.items);
               const progress = list.items.length > 0 ? (checkedCount / list.items.length) * 100 : 0;
+              const isExpanded = expandedList === list.id;
               
               return (
                 <motion.div
@@ -248,28 +271,41 @@ function ShoppingList({ user }) {
                   className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 overflow-hidden"
                   data-testid={`shopping-list-${list.id}`}
                 >
-                  {/* Header with progress */}
-                  <div className="p-6 border-b border-zinc-800">
+                  {/* Clickable Header */}
+                  <div 
+                    onClick={() => toggleExpand(list.id)}
+                    className="p-6 cursor-pointer hover:bg-zinc-900/30 transition-colors"
+                  >
                     <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-xl font-cinzel font-semibold flex items-center gap-2">
-                          <ShoppingCart className="w-5 h-5 text-violet-500" />
-                          Shopping List
-                        </h3>
-                        <p className="text-sm text-zinc-500 mt-1">
-                          Created {new Date(list.created_at).toLocaleDateString()}
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <h3 className="text-xl font-cinzel font-semibold flex items-center gap-2">
+                            <ShoppingCart className="w-5 h-5 text-violet-500" />
+                            Shopping List
+                          </h3>
+                          <p className="text-sm text-zinc-500 mt-1">
+                            Created {new Date(list.created_at).toLocaleDateString()} • {list.items.length} Items
+                          </p>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => {
-                          setListToDelete(list.id);
-                          setDeleteDialogOpen(true);
-                        }}
-                        className="text-zinc-600 hover:text-red-400 transition-colors p-2"
-                        title="Delete shopping list"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setListToDelete(list.id);
+                            setDeleteDialogOpen(true);
+                          }}
+                          className="text-zinc-600 hover:text-red-400 transition-colors p-2"
+                          title="Delete shopping list"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                        {isExpanded ? (
+                          <ChevronUp className="w-6 h-6 text-violet-400" />
+                        ) : (
+                          <ChevronDown className="w-6 h-6 text-zinc-500" />
+                        )}
+                      </div>
                     </div>
                     
                     {/* Progress bar */}
@@ -281,67 +317,79 @@ function ShoppingList({ user }) {
                         />
                       </div>
                       <span className="text-sm text-zinc-400 min-w-[80px] text-right">
-                        {checkedCount} / {list.items.length} items
+                        {checkedCount} / {list.items.length}
                       </span>
                     </div>
                   </div>
 
-                  {/* Items grouped by category */}
-                  <div className="p-6">
-                    {list.items.length === 0 ? (
-                      <p className="text-zinc-500 text-center py-8">
-                        No ingredients found. Make sure your meal plan has AI-generated recipes!
-                      </p>
-                    ) : (
-                      <div className="space-y-6">
-                        {Object.entries(groupedItems).map(([category, items]) => (
-                          <div key={category}>
-                            <h4 className="text-lg font-semibold text-violet-400 mb-3 uppercase tracking-wider flex items-center gap-2">
-                              <span className="w-2 h-2 bg-violet-500 rounded-full"></span>
-                              {category}
-                              <span className="text-xs text-zinc-500 font-normal lowercase">
-                                ({items.length} items)
-                              </span>
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {items.map((item) => {
-                                const checkKey = `${list.id}-${item.originalIndex}`;
-                                const isChecked = checkedItems[checkKey] || false;
-                                
-                                return (
-                                  <div 
-                                    key={item.originalIndex}
-                                    onClick={() => toggleItem(list.id, item.originalIndex)}
-                                    className={`flex items-center space-x-3 p-4 bg-zinc-900/50 border cursor-pointer transition-all duration-200 hover:bg-zinc-800/50 ${
-                                      isChecked ? 'border-green-500/50 bg-green-900/10' : 'border-zinc-800'
-                                    }`}
-                                  >
-                                    <Checkbox 
-                                      checked={isChecked}
-                                      onCheckedChange={() => toggleItem(list.id, item.originalIndex)}
-                                      className={isChecked ? 'border-green-500 data-[state=checked]:bg-green-600' : ''}
-                                      data-testid={`item-checkbox-${item.originalIndex}`}
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <p className={`text-zinc-100 font-medium truncate ${isChecked ? 'line-through text-zinc-500' : ''}`}>
-                                        {item.name}
-                                      </p>
-                                      <p className={`text-sm ${isChecked ? 'text-zinc-600' : 'text-violet-400'}`}>
-                                        {item.quantity} {item.unit}
-                                      </p>
-                                    </div>
-                                    {isChecked && (
-                                      <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                                    )}
+                  {/* Expandable Content */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-6 pb-6 border-t border-zinc-800">
+                          {list.items.length === 0 ? (
+                            <p className="text-zinc-500 text-center py-8">
+                              No ingredients found. Make sure your meal plan has AI-generated recipes!
+                            </p>
+                          ) : (
+                            <div className="space-y-6 pt-6">
+                              {Object.entries(groupedItems).map(([category, items]) => (
+                                <div key={category}>
+                                  <h4 className="text-lg font-semibold text-violet-400 mb-3 uppercase tracking-wider flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-violet-500 rounded-full"></span>
+                                    {category}
+                                    <span className="text-xs text-zinc-500 font-normal lowercase">
+                                      ({items.length} items)
+                                    </span>
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {items.map((item) => {
+                                      const checkKey = `${list.id}-${item.originalIndex}`;
+                                      const isChecked = checkedItems[checkKey] || false;
+                                      
+                                      return (
+                                        <div 
+                                          key={item.originalIndex}
+                                          onClick={() => toggleItem(list.id, item.originalIndex)}
+                                          className={`flex items-center space-x-3 p-4 bg-zinc-900/50 border cursor-pointer transition-all duration-200 hover:bg-zinc-800/50 ${
+                                            isChecked ? 'border-green-500/50 bg-green-900/10' : 'border-zinc-800'
+                                          }`}
+                                        >
+                                          <Checkbox 
+                                            checked={isChecked}
+                                            onCheckedChange={() => toggleItem(list.id, item.originalIndex)}
+                                            className={isChecked ? 'border-green-500 data-[state=checked]:bg-green-600' : ''}
+                                            data-testid={`item-checkbox-${item.originalIndex}`}
+                                          />
+                                          <div className="flex-1 min-w-0">
+                                            <p className={`text-zinc-100 font-medium truncate ${isChecked ? 'line-through text-zinc-500' : ''}`}>
+                                              {capitalize(item.name)}
+                                            </p>
+                                            <p className={`text-sm ${isChecked ? 'text-zinc-600' : 'text-violet-400'}`}>
+                                              {item.quantity} {item.unit}
+                                            </p>
+                                          </div>
+                                          {isChecked && (
+                                            <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                                          )}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
-                                );
-                              })}
+                                </div>
+                              ))}
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          )}
+                        </div>
+                      </motion.div>
                     )}
-                  </div>
+                  </AnimatePresence>
                 </motion.div>
               );
             })}
