@@ -55,6 +55,7 @@ class UserResponse(BaseModel):
     dietary_preferences: List[str] = []
     cooking_methods: List[str] = []
     health_goal: Optional[str] = None
+    allergies: List[str] = []
     oauth_provider: Optional[str] = None
     picture_url: Optional[str] = None
 
