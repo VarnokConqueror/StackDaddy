@@ -329,6 +329,25 @@ async def update_preferences(
     
     return {"message": "Preferences updated"}
 
+@api_router.put("/auth/profile-picture")
+async def update_profile_picture(
+    picture_data: Dict[str, str],
+    authorization: str = Header(None)
+):
+    """Update user profile picture URL"""
+    user = await get_current_user(authorization)
+    
+    picture_url = picture_data.get("picture_url")
+    if not picture_url:
+        raise HTTPException(status_code=400, detail="picture_url required")
+    
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"picture_url": picture_url}}
+    )
+    
+    return {"message": "Profile picture updated", "picture_url": picture_url}
+
 # ============== OAuth Routes ==============
 
 class OAuthSessionRequest(BaseModel):
