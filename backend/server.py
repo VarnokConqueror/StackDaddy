@@ -1323,6 +1323,17 @@ async def get_shopping_lists(authorization: str = Header(None)):
     lists = await db.shopping_lists.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
     return [ShoppingList(**lst) for lst in lists]
 
+@api_router.delete("/shopping-lists/{list_id}")
+async def delete_shopping_list(list_id: str, authorization: str = Header(None)):
+    user = await get_current_user(authorization)
+    
+    result = await db.shopping_lists.delete_one({"id": list_id, "user_id": user["id"]})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Shopping list not found")
+    
+    return {"message": "Shopping list deleted"}
+
 # ============== Supplement Routes ==============
 
 @api_router.get("/supplements", response_model=List[Supplement])
