@@ -399,13 +399,13 @@ function MealPlanner({ user }) {
 
       {/* View/Edit Plan Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl" data-testid="view-plan-dialog">
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" data-testid="view-plan-dialog">
           <DialogHeader>
             <DialogTitle className="text-2xl font-cinzel">WEEKLY MEAL PLAN</DialogTitle>
           </DialogHeader>
           
           {selectedPlan && (
-            <div className="mt-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="mt-4 overflow-y-auto pr-2 flex-1">
               {selectedPlan.goal && (
                 <div className="mb-4 p-4 bg-violet-600/20 border border-violet-500/30">
                   <p className="text-violet-300 font-semibold">
