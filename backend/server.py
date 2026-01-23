@@ -1360,6 +1360,87 @@ async def delete_shopping_list(list_id: str, authorization: str = Header(None)):
     
     return {"message": "Shopping list deleted"}
 
+# ============== Pantry Routes ==============
+
+PANTRY_CATEGORIES = ["Spices", "Oils & Vinegars", "Grains & Pasta", "Canned Goods", "Condiments", "Baking", "Other"]
+
+@api_router.get("/pantry")
+async def get_pantry(authorization: str = Header(None)):
+    user = await get_current_user(authorization)
+    
+    items = await db.pantry.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    return items
+
+@api_router.post("/pantry")
+async def add_pantry_item(item_data: PantryItemCreate, authorization: str = Header(None)):
+    user = await get_current_user(authorization)
+    
+    item_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    item_doc = {
+        "id": item_id,
+        "user_id": user["id"],
+        "name": item_data.name,
+        "quantity": item_data.quantity,
+        "unit": item_data.unit,
+        "category": item_data.category,
+        "low_stock_threshold": item_data.low_stock_threshold,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.pantry.insert_one(item_doc)
+    return {"id": item_id, **item_data.model_dump()}
+
+@api_router.put("/pantry/{item_id}")
+async def update_pantry_item(item_id: str, updates: Dict[str, Any], authorization: str = Header(None)):
+    user = await get_current_user(authorization)
+    
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.pantry.update_one(
+        {"id": item_id, "user_id": user["id"]},
+        {"$set": updates}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Pantry item not found")
+    
+    return {"message": "Pantry item updated"}
+
+@api_router.delete("/pantry/{item_id}")
+async def delete_pantry_item(item_id: str, authorization: str = Header(None)):
+    user = await get_current_user(authorization)
+    
+    result = await db.pantry.delete_one({"id": item_id, "user_id": user["id"]})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Pantry item not found")
+    
+    return {"message": "Pantry item deleted"}
+
+@api_router.post("/pantry/use")
+async def use_pantry_item(data: Dict[str, Any], authorization: str = Header(None)):
+    """Deduct quantity from pantry item after shopping/cooking"""
+    user = await get_current_user(authorization)
+    
+    item_id = data.get("item_id")
+    amount = data.get("amount", 0)
+    
+    item = await db.pantry.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Pantry item not found")
+    
+    new_quantity = max(0, item["quantity"] - amount)
+    
+    await db.pantry.update_one(
+        {"id": item_id, "user_id": user["id"]},
+        {"$set": {"quantity": new_quantity, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"message": "Pantry updated", "new_quantity": new_quantity}
+
 # ============== Supplement Routes ==============
 
 @api_router.get("/supplements", response_model=List[Supplement])
