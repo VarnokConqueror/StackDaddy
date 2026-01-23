@@ -331,6 +331,8 @@ async def update_preferences(
         update_data["cooking_methods"] = preferences["cooking_methods"]
     if "health_goal" in preferences:
         update_data["health_goal"] = preferences["health_goal"]
+    if "allergies" in preferences:
+        update_data["allergies"] = preferences["allergies"]
     
     await db.users.update_one(
         {"id": user["id"]},
