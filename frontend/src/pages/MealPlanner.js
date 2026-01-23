@@ -453,6 +453,125 @@ function MealPlanner({ user }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-cinzel text-red-400">
+              BANISH THIS PLAN?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <p className="text-zinc-400 mb-6">
+              This meal plan shall be permanently removed from your realm. This decree cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setDeleteDialogOpen(false)}
+                variant="outline"
+                className="flex-1 border-zinc-700 hover:bg-zinc-800"
+              >
+                SPARE IT
+              </Button>
+              <Button
+                onClick={() => deleteMealPlan(planToDelete)}
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                data-testid="confirm-delete-btn"
+              >
+                BANISH
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recipe Detail Dialog */}
+      <Dialog open={recipeDialogOpen} onOpenChange={setRecipeDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-2xl max-h-[85vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-cinzel flex items-center gap-2">
+              <ChefHat className="w-6 h-6 text-violet-500" />
+              {selectedRecipe?.name || 'Royal Recipe'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedRecipe && (
+            <div className="mt-4 overflow-y-auto max-h-[60vh] pr-2">
+              <div className="flex items-center gap-4 mb-4 text-sm text-zinc-400">
+                <span className="capitalize bg-violet-600/20 px-3 py-1 rounded text-violet-300">
+                  {selectedRecipe.mealType}
+                </span>
+                <span>{selectedRecipe.day}</span>
+                {selectedRecipe.prepTime && (
+                  <span>Prep: {selectedRecipe.prepTime} min</span>
+                )}
+                {selectedRecipe.cookTime && (
+                  <span>Cook: {selectedRecipe.cookTime} min</span>
+                )}
+                {selectedRecipe.servings && (
+                  <span>Serves: {selectedRecipe.servings}</span>
+                )}
+              </div>
+
+              {/* Ingredients Section */}
+              <div className="mb-6">
+                <h3 className="text-lg font-cinzel font-semibold mb-3 text-violet-400 flex items-center gap-2">
+                  <span className="w-8 h-8 bg-violet-600/20 rounded-full flex items-center justify-center text-sm">1</span>
+                  ROYAL INGREDIENTS
+                </h3>
+                {selectedRecipe.ingredients && selectedRecipe.ingredients.length > 0 ? (
+                  <ul className="space-y-2 pl-4">
+                    {selectedRecipe.ingredients.map((ingredient, idx) => (
+                      <li key={idx} className="text-zinc-300 flex items-start gap-2">
+                        <span className="text-violet-500 mt-1">•</span>
+                        <span>
+                          {typeof ingredient === 'object' 
+                            ? `${ingredient.quantity || ''} ${ingredient.unit || ''} ${ingredient.name}`.trim()
+                            : ingredient
+                          }
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-zinc-500 italic pl-4">
+                    Generate with AI to reveal the sacred ingredients
+                  </p>
+                )}
+              </div>
+
+              {/* Instructions Section */}
+              <div>
+                <h3 className="text-lg font-cinzel font-semibold mb-3 text-neon-pink flex items-center gap-2">
+                  <span className="w-8 h-8 bg-pink-600/20 rounded-full flex items-center justify-center text-sm">2</span>
+                  PREPARATION RITUAL
+                </h3>
+                <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded">
+                  {typeof selectedRecipe.instructions === 'string' ? (
+                    <p className="text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                      {selectedRecipe.instructions}
+                    </p>
+                  ) : Array.isArray(selectedRecipe.instructions) ? (
+                    <ol className="space-y-3">
+                      {selectedRecipe.instructions.map((step, idx) => (
+                        <li key={idx} className="text-zinc-300 flex gap-3">
+                          <span className="text-violet-400 font-bold min-w-[24px]">{idx + 1}.</span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="text-zinc-500 italic">
+                      Generate with AI to unlock the preparation secrets
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
