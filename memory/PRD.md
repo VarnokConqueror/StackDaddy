@@ -33,7 +33,14 @@ Build a subscription-based application that provides weekly meal plans with corr
 - [x] Skip leftover meal ingredients (no double counting)
 - [x] Subtract pantry items from shopping list
 
-### 3. Supplement Tracking
+### 3. Pantry Tracking (NEW)
+- [x] Track spices, oils, staples, and other pantry items
+- [x] Low stock alerts with customizable thresholds
+- [x] Categories: Spices, Oils & Vinegars, Grains & Pasta, Canned Goods, Condiments, Baking
+- [x] Edit/delete pantry items
+- [x] Pantry items subtracted from shopping list automatically
+
+### 4. Supplement Tracking
 - [x] Pre-populated supplement database (8+ supplements)
 - [x] Add supplements to personal inventory
 - [x] Track dose, timing, frequency, stock quantity
