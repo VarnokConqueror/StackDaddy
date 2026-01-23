@@ -775,27 +775,30 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
     plan_id = str(uuid.uuid4())
     start_date = datetime.now(timezone.utc)
     
-    if plan_data.plan_type == "weekly":
-        end_date = start_date + timedelta(days=7)
-        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    else:
-        end_date = start_date + timedelta(days=30)
-        days = [f"Day {i+1}" for i in range(30)]
+    # ALWAYS weekly, removed monthly option
+    end_date = start_date + timedelta(days=7)
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     
     plan_days = [
         {"day": day, "meals": {"breakfast": None, "lunch": None, "dinner": None, "snack": None}, "locked": False}
         for day in days
     ]
     
+    # Use profile preferences if not provided
+    dietary_prefs = plan_data.dietary_preferences if plan_data.dietary_preferences else user.get("dietary_preferences", [])
+    cooking_methods = plan_data.cooking_methods if plan_data.cooking_methods else user.get("cooking_methods", [])
+    goal = plan_data.goal if plan_data.goal else user.get("health_goal")
+    
     plan_doc = {
         "id": plan_id,
         "user_id": user["id"],
-        "plan_type": plan_data.plan_type,
+        "plan_type": "weekly",
+        "goal": goal,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "days": plan_days,
-        "dietary_preferences": plan_data.dietary_preferences or user.get("dietary_preferences", []),
-        "cooking_methods": plan_data.cooking_methods or user.get("cooking_methods", []),
+        "dietary_preferences": dietary_prefs,
+        "cooking_methods": cooking_methods,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -806,15 +809,33 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
                 chat = LlmChat(
                     api_key=ai_config["api_key"],
                     session_id=f"meal_plan_{plan_id}",
-                    system_message="You are a professional meal planning assistant. Generate meal suggestions based on dietary preferences and cooking methods."
+                    system_message="You are a professional nutritionist and meal planning expert. Generate practical, healthy meal suggestions."
                 ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
                 
-                prompt = f"""Generate a {plan_data.plan_type} meal plan with these preferences:
-Dietary: {', '.join(plan_data.dietary_preferences or user.get('dietary_preferences', []))}
-Cooking methods: {', '.join(plan_data.cooking_methods or user.get('cooking_methods', []))}
+                goal_context = ""
+                if goal:
+                    goal_map = {
+                        "lose_weight": "focused on calorie deficit, high protein, lower carbs for weight loss",
+                        "gain_weight": "calorie surplus with nutrient-dense foods for healthy weight gain",
+                        "gain_muscle": "high protein (1g per lb bodyweight), balanced carbs and fats for muscle building",
+                        "eat_healthy": "balanced nutrition, whole foods, variety of nutrients",
+                        "increase_energy": "complex carbs, B vitamins, sustained energy foods",
+                        "improve_digestion": "fiber-rich, probiotic foods, gentle on stomach"
+                    }
+                    goal_context = f"Goal: {goal_map.get(goal, 'balanced nutrition')}\n"
+                
+                prompt = f"""Generate a 7-day weekly meal plan with these specifications:
+{goal_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
+Cooking methods: {', '.join(cooking_methods) if cooking_methods else 'Any'}
 
-Return JSON with meal suggestions for each day. Format:
-{{"suggestions": [{{"day": "Monday", "breakfast": "...", "lunch": "...", "dinner": "...", "snack": "..."}}]}}"""
+For each day (Monday-Sunday), suggest:
+- Breakfast
+- Lunch  
+- Dinner
+- Snack
+
+Keep meals practical, easy to prepare, and appropriate for the goal. Include variety across the week.
+Format as JSON: {{"suggestions": [{{"day": "Monday", "breakfast": "...", "lunch": "...", "dinner": "...", "snack": "..."}}]}}"""
                 
                 response = await chat.send_message(UserMessage(text=prompt))
                 plan_doc["ai_suggestions"] = response
