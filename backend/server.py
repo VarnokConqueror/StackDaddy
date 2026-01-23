@@ -895,6 +895,22 @@ async def delete_meal_plan(plan_id: str, authorization: str = Header(None)):
     
     return {"message": "Meal plan deleted"}
 
+@api_router.put("/meal-plans/{plan_id}")
+async def update_meal_plan(
+    plan_id: str,
+    updates: Dict[str, Any],
+    authorization: str = Header(None)
+):
+    """Update meal plan - used to assign meals to days"""
+    user = await get_current_user(authorization)
+    
+    await db.meal_plans.update_one(
+        {"id": plan_id, "user_id": user["id"]},
+        {"$set": updates}
+    )
+    
+    return {"message": "Meal plan updated"}
+
 # ============== Shopping List Routes ==============
 
 @api_router.post("/shopping-lists", response_model=ShoppingList)
