@@ -70,7 +70,8 @@ function Profile({ user, setUser }) {
     try {
       await axios.put(`${API}/auth/preferences`, {
         dietary_preferences: dietary,
-        cooking_methods: cooking
+        cooking_methods: cooking,
+        health_goal: healthGoal
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -83,6 +84,35 @@ function Profile({ user, setUser }) {
       setUser(userRes.data);
     } catch (error) {
       toast.error('Failed to save preferences');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateProfilePicture = async () => {
+    if (!pictureUrl) {
+      toast.error('Please enter a picture URL');
+      return;
+    }
+
+    setSaving(true);
+    const token = localStorage.getItem('token');
+    
+    try {
+      await axios.put(`${API}/auth/profile-picture`, {
+        picture_url: pictureUrl
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      toast.success('Profile picture updated!');
+      
+      const userRes = await axios.get(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(userRes.data);
+    } catch (error) {
+      toast.error('Failed to update profile picture');
     } finally {
       setSaving(false);
     }
