@@ -986,6 +986,15 @@ Respond ONLY with valid JSON in this exact format:
                                     plan_days[i]["meals"]["dinner"] = ai_day.get("dinner", "")
                                     plan_days[i]["meals"]["snack"] = ai_day.get("snack", "")
                                     
+                                    # Check if lunch is leftover
+                                    is_leftover = ai_day.get("lunch_is_leftover", False)
+                                    plan_days[i]["is_leftover"] = {
+                                        "breakfast": False,
+                                        "lunch": is_leftover,
+                                        "dinner": False,
+                                        "snack": False
+                                    }
+                                    
                                     # Add detailed recipes
                                     plan_days[i]["recipes"] = {}
                                     plan_days[i]["instructions"] = {}
@@ -1022,6 +1031,7 @@ Respond ONLY with valid JSON in this exact format:
         "days": plan_days,
         "dietary_preferences": dietary_prefs,
         "cooking_methods": cooking_methods,
+        "servings": servings,
         "ai_suggestions": ai_suggestions_raw,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
