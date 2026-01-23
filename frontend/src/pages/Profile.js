@@ -210,26 +210,31 @@ function Profile({ user, setUser }) {
 
           <div className="space-y-4 mb-4">
             <div>
-              <Label className="text-zinc-300 mb-2 block">Profile Picture URL</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="url"
-                  value={pictureUrl}
-                  onChange={(e) => setPictureUrl(e.target.value)}
-                  placeholder="https://example.com/your-picture.jpg"
-                  className="flex-1 bg-zinc-900 border-zinc-800"
-                  data-testid="picture-url-input"
+              <Label className="text-zinc-300 mb-2 block">Profile Picture</Label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="picture-upload"
                 />
+                <label
+                  htmlFor="picture-upload"
+                  className="flex-1 px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 cursor-pointer hover:border-violet-500 transition-colors"
+                >
+                  {pictureUrl && pictureUrl !== user?.picture_url ? 'Image selected ✓' : 'Choose image file...'}
+                </label>
                 <Button
                   onClick={updateProfilePicture}
-                  disabled={saving || !pictureUrl}
+                  disabled={saving || !pictureUrl || pictureUrl === user?.picture_url}
                   className="bg-neon-pink hover:bg-pink-600"
                   data-testid="update-picture-button"
                 >
                   {saving ? 'Saving...' : 'Update'}
                 </Button>
               </div>
-              <p className="text-xs text-zinc-500 mt-1">Enter a URL to your profile picture</p>
+              <p className="text-xs text-zinc-500 mt-1">Upload an image (max 2MB, JPG/PNG)</p>
             </div>
           </div>
 
