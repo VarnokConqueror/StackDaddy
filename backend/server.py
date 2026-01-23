@@ -808,18 +808,7 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
     cooking_methods = plan_data.cooking_methods if plan_data.cooking_methods else user.get("cooking_methods", [])
     goal = plan_data.goal if plan_data.goal else user.get("health_goal")
     
-    plan_doc = {
-        "id": plan_id,
-        "user_id": user["id"],
-        "plan_type": "weekly",
-        "goal": goal,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-        "days": plan_days,
-        "dietary_preferences": dietary_prefs,
-        "cooking_methods": cooking_methods,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
+    ai_suggestions_raw = None
     
     if plan_data.generate_with_ai:
         ai_config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
@@ -828,7 +817,7 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
                 chat = LlmChat(
                     api_key=ai_config["api_key"],
                     session_id=f"meal_plan_{plan_id}",
-                    system_message="You are a professional nutritionist and meal planning expert. Generate practical, healthy meal suggestions."
+                    system_message="You are a professional nutritionist and meal planning expert. Generate practical, healthy meal suggestions with cooking instructions."
                 ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
                 
                 goal_context = ""
@@ -843,23 +832,93 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
                     }
                     goal_context = f"Goal: {goal_map.get(goal, 'balanced nutrition')}\n"
                 
-                prompt = f"""Generate a 7-day weekly meal plan with these specifications:
-{goal_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
+                # Get user allergies if they exist
+                allergies = user.get("allergies", [])
+                allergy_context = ""
+                if allergies:
+                    allergy_context = f"ALLERGIES/RESTRICTIONS: Avoid {', '.join(allergies)}\n"
+                
+                prompt = f"""Generate a complete 7-day weekly meal plan with these specifications:
+{goal_context}{allergy_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
 Cooking methods: {', '.join(cooking_methods) if cooking_methods else 'Any'}
 
-For each day (Monday-Sunday), suggest:
-- Breakfast
-- Lunch  
-- Dinner
-- Snack
+For each day (Monday through Sunday), provide SPECIFIC meal names and brief cooking instructions:
+- Breakfast (with 1-2 sentence cooking instruction)
+- Lunch (with 1-2 sentence cooking instruction)
+- Dinner (with 1-2 sentence cooking instruction)
+- Snack (simple, no cooking needed)
 
-Keep meals practical, easy to prepare, and appropriate for the goal. Include variety across the week.
-Format as JSON: {{"suggestions": [{{"day": "Monday", "breakfast": "...", "lunch": "...", "dinner": "...", "snack": "..."}}]}}"""
+Keep meals practical, easy to prepare, appropriate for the goal, and include variety.
+
+Respond ONLY with valid JSON in this exact format:
+{{
+  "days": [
+    {{
+      "day": "Monday",
+      "breakfast": "Meal name",
+      "breakfast_instructions": "Brief cooking steps",
+      "lunch": "Meal name", 
+      "lunch_instructions": "Brief cooking steps",
+      "dinner": "Meal name",
+      "dinner_instructions": "Brief cooking steps",
+      "snack": "Snack name"
+    }}
+  ]
+}}"""
                 
                 response = await chat.send_message(UserMessage(text=prompt))
-                plan_doc["ai_suggestions"] = response
+                ai_suggestions_raw = response
+                
+                # Parse AI response and populate meals
+                try:
+                    import json
+                    # Extract JSON from response
+                    response_text = response if isinstance(response, str) else str(response)
+                    
+                    # Try to find JSON in the response
+                    start_idx = response_text.find('{')
+                    end_idx = response_text.rfind('}') + 1
+                    
+                    if start_idx != -1 and end_idx > start_idx:
+                        json_str = response_text[start_idx:end_idx]
+                        ai_data = json.loads(json_str)
+                        
+                        # Populate meal plan with AI suggestions
+                        if "days" in ai_data:
+                            for i, ai_day in enumerate(ai_data["days"]):
+                                if i < len(plan_days):
+                                    plan_days[i]["meals"]["breakfast"] = ai_day.get("breakfast", "")
+                                    plan_days[i]["meals"]["lunch"] = ai_day.get("lunch", "")
+                                    plan_days[i]["meals"]["dinner"] = ai_day.get("dinner", "")
+                                    plan_days[i]["meals"]["snack"] = ai_day.get("snack", "")
+                                    
+                                    # Add cooking instructions
+                                    plan_days[i]["instructions"] = {
+                                        "breakfast": ai_day.get("breakfast_instructions", ""),
+                                        "lunch": ai_day.get("lunch_instructions", ""),
+                                        "dinner": ai_day.get("dinner_instructions", ""),
+                                        "snack": ""
+                                    }
+                except Exception as parse_error:
+                    logging.error(f"Failed to parse AI response: {parse_error}")
+                    # Continue with empty meals
+                    
             except Exception as e:
                 logging.error(f"AI generation error: {e}")
+    
+    plan_doc = {
+        "id": plan_id,
+        "user_id": user["id"],
+        "plan_type": "weekly",
+        "goal": goal,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "days": plan_days,
+        "dietary_preferences": dietary_prefs,
+        "cooking_methods": cooking_methods,
+        "ai_suggestions": ai_suggestions_raw,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
     
     await db.meal_plans.insert_one(plan_doc)
     return MealPlan(**plan_doc)
