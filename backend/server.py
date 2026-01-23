@@ -1224,11 +1224,28 @@ async def get_ai_config(authorization: str = Header(None)):
 async def update_ai_config(config_data: AIConfigUpdate, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    await db.ai_configs.update_one(
-        {"user_id": user["id"]},
-        {"$set": config_data.model_dump()},
-        upsert=True
-    )
+    update_data = {
+        "provider": config_data.provider,
+        "model": config_data.model
+    }
+    
+    # Only update api_key if a new one is provided (not masked)
+    if config_data.api_key and config_data.api_key != "********":
+        update_data["api_key"] = config_data.api_key
+    
+    # Check if config exists
+    existing = await db.ai_configs.find_one({"user_id": user["id"]})
+    
+    if existing:
+        await db.ai_configs.update_one(
+            {"user_id": user["id"]},
+            {"$set": update_data}
+        )
+    else:
+        config_id = str(uuid.uuid4())
+        update_data["id"] = config_id
+        update_data["user_id"] = user["id"]
+        await db.ai_configs.insert_one(update_data)
     
     return {"message": "AI configuration updated"}
 
