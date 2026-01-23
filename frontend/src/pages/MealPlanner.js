@@ -87,16 +87,18 @@ function MealPlanner({ user }) {
         goal: goal || null,
         dietary_preferences: selectedDietary,
         cooking_methods: selectedCooking,
-        generate_with_ai: useAI
+        generate_with_ai: useAI,
+        servings: servings,
+        use_leftovers: useLeftovers
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      toast.success('Weekly meal plan created! Click Edit to add meals.');
+      toast.success(useAI ? 'Meal plan generated with AI!' : 'Weekly meal plan created! Click Edit to add meals.');
       setDialogOpen(false);
       fetchMealPlans();
     } catch (error) {
-      toast.error('Failed to create meal plan');
+      toast.error(error.response?.data?.detail || 'Failed to create meal plan');
     } finally {
       setCreating(false);
     }
