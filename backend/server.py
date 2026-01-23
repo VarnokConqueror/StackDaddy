@@ -92,6 +92,7 @@ class Meal(BaseModel):
 
 class MealPlanCreate(BaseModel):
     plan_type: str = "weekly"
+    goal: Optional[str] = None  # lose_weight, gain_weight, gain_muscle, eat_healthy, etc.
     dietary_preferences: List[str] = []
     cooking_methods: List[str] = []
     generate_with_ai: bool = False
