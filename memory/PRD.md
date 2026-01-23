@@ -14,11 +14,11 @@ Build a subscription-based application that provides weekly meal plans with corr
 - [x] Generate weekly meal plans based on user dietary preferences
 - [x] Support dietary options: Meat Eating, Poultry Only, Fish Only, Vegetarian, Vegan
 - [x] Cooking method selection: Air Fryer, Microwave, Stovetop, Toaster, Instant Pot
-- [x] AI-powered meal generation (requires user API key)
+- [x] AI-powered meal generation with FULL recipes (ingredients + detailed instructions)
 - [x] Manual meal editing and customization
-- [x] Cooking instructions for each meal
+- [x] "View Royal Recipe" popup with ingredients and cooking instructions
 - [x] Health goal integration (lose weight, gain muscle, etc.)
-- [x] Delete meal plans
+- [x] Delete meal plans with themed confirmation dialog ("Banish from realm")
 
 ### 2. Shopping List
 - [x] Generate shopping list from meal plan
