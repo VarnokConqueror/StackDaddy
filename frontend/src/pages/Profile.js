@@ -233,7 +233,7 @@ function Profile({ user, setUser }) {
           </div>
         </motion.div>
 
-        {/* Dietary Preferences */}
+        {/* Health Goal & Dietary Preferences */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -242,8 +242,27 @@ function Profile({ user, setUser }) {
         >
           <h2 className="text-xl font-cinzel font-semibold mb-4 flex items-center gap-2">
             <Settings className="w-5 h-5 text-violet-500" />
-            DIETARY PREFERENCES
+            NUTRITION PREFERENCES
           </h2>
+          
+          <div className="space-y-4 mb-6">
+            <div>
+              <Label className="text-zinc-300 mb-2 block">Health Goal</Label>
+              <Select value={healthGoal} onValueChange={setHealthGoal}>
+                <SelectTrigger className="bg-zinc-900 border-zinc-800" data-testid="health-goal-select">
+                  <SelectValue placeholder="Select your health goal" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-800">
+                  {HEALTH_GOALS.map((g) => (
+                    <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-zinc-500 mt-1">This will be used for AI meal & supplement recommendations</p>
+            </div>
+          </div>
+
+          <h3 className="text-lg font-cinzel font-semibold mb-4">DIETARY PREFERENCES</h3>
           <div className="space-y-2 mb-4">{DIETARY_OPTIONS.map((option) => (
               <div key={option} className="flex items-center space-x-2">
                 <Checkbox
