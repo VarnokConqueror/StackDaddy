@@ -101,6 +101,7 @@ class MealPlanCreate(BaseModel):
 class MealPlanDay(BaseModel):
     day: str
     meals: Dict[str, Optional[str]]
+    instructions: Optional[Dict[str, str]] = {}
     locked: bool = False
 
 class MealPlan(BaseModel):
