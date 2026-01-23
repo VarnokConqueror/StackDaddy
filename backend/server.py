@@ -881,20 +881,19 @@ async def get_meal_plan(plan_id: str, authorization: str = Header(None)):
     
     return MealPlan(**plan)
 
-@api_router.put("/meal-plans/{plan_id}")
-async def update_meal_plan(
-    plan_id: str,
-    updates: Dict[str, Any],
-    authorization: str = Header(None)
-):
+@api_router.delete("/meal-plans/{plan_id}")
+async def delete_meal_plan(plan_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    await db.meal_plans.update_one(
-        {"id": plan_id, "user_id": user["id"]},
-        {"$set": updates}
-    )
+    result = await db.meal_plans.delete_one({"id": plan_id, "user_id": user["id"]})
     
-    return {"message": "Meal plan updated"}
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Meal plan not found")
+    
+    # Also delete associated shopping lists
+    await db.shopping_lists.delete_many({"meal_plan_id": plan_id})
+    
+    return {"message": "Meal plan deleted"}
 
 # ============== Shopping List Routes ==============
 
