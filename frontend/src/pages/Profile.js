@@ -162,12 +162,50 @@ function Profile({ user, setUser }) {
           className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-6 mb-6"
         >
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-violet-600 to-pink-600 rounded-full flex items-center justify-center">
-              <User className="w-8 h-8 text-white" />
+            <div className="relative">
+              {user?.picture_url ? (
+                <img 
+                  src={user.picture_url} 
+                  alt={user.name}
+                  className="w-16 h-16 rounded-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div className={`w-16 h-16 bg-gradient-to-br from-violet-600 to-pink-600 rounded-full flex items-center justify-center ${user?.picture_url ? 'hidden' : ''}`}>
+                <User className="w-8 h-8 text-white" />
+              </div>
             </div>
             <div>
               <h2 className="text-2xl font-cinzel font-semibold">{user?.name}</h2>
               <p className="text-zinc-400">{user?.email}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 mb-4">
+            <div>
+              <Label className="text-zinc-300 mb-2 block">Profile Picture URL</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="url"
+                  value={pictureUrl}
+                  onChange={(e) => setPictureUrl(e.target.value)}
+                  placeholder="https://example.com/your-picture.jpg"
+                  className="flex-1 bg-zinc-900 border-zinc-800"
+                  data-testid="picture-url-input"
+                />
+                <Button
+                  onClick={updateProfilePicture}
+                  disabled={saving || !pictureUrl}
+                  className="bg-neon-pink hover:bg-pink-600"
+                  data-testid="update-picture-button"
+                >
+                  {saving ? 'Saving...' : 'Update'}
+                </Button>
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">Enter a URL to your profile picture</p>
             </div>
           </div>
 
