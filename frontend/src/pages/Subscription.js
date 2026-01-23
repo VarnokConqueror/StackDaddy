@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-function Subscription({ user }) {
+function Subscription({ user, setUser }) {
   const [processing, setProcessing] = useState(false);
 
   const handleSubscribe = async (packageId) => {
@@ -60,6 +60,18 @@ function Subscription({ user }) {
             <p className="text-zinc-300">
               Your subscription is active until {user.subscription_end_date && new Date(user.subscription_end_date).toLocaleDateString()}
             </p>
+          </motion.div>
+        )}
+
+        {/* Promo Code Section */}
+        {user?.subscription_status !== 'active' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="max-w-2xl mx-auto mb-12"
+          >
+            <PromoCodeSection user={user} setUser={setUser} />
           </motion.div>
         )}
 
