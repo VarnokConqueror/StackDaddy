@@ -314,12 +314,17 @@ async def update_preferences(
 ):
     user = await get_current_user(authorization)
     
+    update_data = {}
+    if "dietary_preferences" in preferences:
+        update_data["dietary_preferences"] = preferences["dietary_preferences"]
+    if "cooking_methods" in preferences:
+        update_data["cooking_methods"] = preferences["cooking_methods"]
+    if "health_goal" in preferences:
+        update_data["health_goal"] = preferences["health_goal"]
+    
     await db.users.update_one(
         {"id": user["id"]},
-        {"$set": {
-            "dietary_preferences": preferences.get("dietary_preferences", []),
-            "cooking_methods": preferences.get("cooking_methods", [])
-        }}
+        {"$set": update_data}
     )
     
     return {"message": "Preferences updated"}
