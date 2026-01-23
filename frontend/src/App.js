@@ -14,6 +14,7 @@ import MySupplements from './pages/MySupplements';
 import Profile from './pages/Profile';
 import Subscription from './pages/Subscription';
 import SubscriptionSuccess from './pages/SubscriptionSuccess';
+import AdminPanel from './pages/AdminPanel';
 import './App.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
