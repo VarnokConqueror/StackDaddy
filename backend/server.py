@@ -1368,23 +1368,64 @@ async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True
                         "quantity": parsed["quantity"],
                         "unit": parsed["unit"],
                         "category": parsed["category"],
-                        "checked": False
+                        "checked": False,
+                        "in_pantry": False,
+                        "pantry_has": 0
                     }
     
-    # Round quantities for cleaner display
+    # Subtract pantry items if enabled
+    if subtract_pantry:
+        pantry_items = await db.pantry.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+        
+        for pantry_item in pantry_items:
+            pantry_name = pantry_item["name"].lower()
+            pantry_unit = pantry_item["unit"].lower()
+            pantry_qty = pantry_item["quantity"]
+            
+            # Try to match with shopping list items
+            for key in list(all_ingredients.keys()):
+                item = all_ingredients[key]
+                item_name = item["name"].lower()
+                
+                # Check if pantry item name is in shopping item name or vice versa
+                if pantry_name in item_name or item_name in pantry_name:
+                    # Same or compatible units
+                    if pantry_unit == item["unit"].lower() or pantry_unit in item["unit"].lower():
+                        item["in_pantry"] = True
+                        item["pantry_has"] = pantry_qty
+                        
+                        # Subtract what we have
+                        new_qty = item["quantity"] - pantry_qty
+                        if new_qty <= 0:
+                            # We have enough, remove from list but mark it
+                            item["quantity"] = 0
+                            item["checked"] = True  # Auto-check items we already have
+                        else:
+                            item["quantity"] = new_qty
+    
+    # Round quantities for cleaner display and filter out zero quantity items
+    final_items = []
     for key in all_ingredients:
-        qty = all_ingredients[key]["quantity"]
-        if qty == int(qty):
-            all_ingredients[key]["quantity"] = int(qty)
-        else:
-            all_ingredients[key]["quantity"] = round(qty, 2)
+        item = all_ingredients[key]
+        qty = item["quantity"]
+        if qty > 0:
+            if qty == int(qty):
+                item["quantity"] = int(qty)
+            else:
+                item["quantity"] = round(qty, 2)
+            final_items.append(item)
+        elif item.get("in_pantry"):
+            # Keep items we have in pantry but mark as checked
+            item["quantity"] = 0
+            final_items.append(item)
     
     list_id = str(uuid.uuid4())
     list_doc = {
         "id": list_id,
         "user_id": user["id"],
         "meal_plan_id": meal_plan_id,
-        "items": list(all_ingredients.values()),
+        "items": final_items,
+        "servings": servings,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
