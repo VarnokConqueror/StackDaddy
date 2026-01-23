@@ -143,7 +143,8 @@ Build a subscription-based application that provides weekly meal plans with corr
 - [ ] Facebook OAuth integration
 
 ### P2 - Medium Priority
-- [ ] AI-based allergy editing for meal plans
+- [x] AI-based allergy editing ("regenerate without peanuts")
+- [x] User allergies saved in profile and auto-applied to AI generation
 - [ ] Timestamps for meals and supplements
 - [ ] Ingredient tracking in shopping list
 
