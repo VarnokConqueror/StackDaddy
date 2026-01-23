@@ -29,6 +29,8 @@ function Profile({ user, setUser }) {
   const [aiConfig, setAiConfig] = useState(null);
   const [dietary, setDietary] = useState([]);
   const [cooking, setCooking] = useState([]);
+  const [healthGoal, setHealthGoal] = useState('');
+  const [pictureUrl, setPictureUrl] = useState('');
   const [aiProvider, setAiProvider] = useState('openai');
   const [aiModel, setAiModel] = useState('gpt-5.2');
   const [aiKey, setAiKey] = useState('');
@@ -39,6 +41,8 @@ function Profile({ user, setUser }) {
     if (user) {
       setDietary(user.dietary_preferences || []);
       setCooking(user.cooking_methods || []);
+      setHealthGoal(user.health_goal || '');
+      setPictureUrl(user.picture_url || '');
     }
   }, [user]);
 
