@@ -163,7 +163,7 @@ function Pantry({ user }) {
         >
           <div>
             <h1 className="text-4xl font-cinzel font-black uppercase mb-2">ROYAL PANTRY</h1>
-            <p className="text-zinc-400">Track your spices, oils, and staples - the app will know what you have!</p>
+            <p className="text-zinc-400 italic">Your kingdom's stores - spices, oils, and sacred provisions</p>
           </div>
           <Button
             onClick={openAddDialog}
@@ -171,7 +171,7 @@ function Pantry({ user }) {
             data-testid="add-pantry-item-button"
           >
             <Plus className="w-4 h-4 mr-2" />
-            ADD ITEM
+            ADD PROVISION
           </Button>
         </motion.div>
 
@@ -184,12 +184,13 @@ function Pantry({ user }) {
           >
             <h3 className="text-amber-400 font-semibold flex items-center gap-2 mb-2">
               <AlertTriangle className="w-5 h-5" />
-              LOW STOCK ALERT
+              PROVISIONS RUNNING LOW
             </h3>
+            <p className="text-zinc-500 text-sm mb-2 italic">The Court advises restocking these items:</p>
             <div className="flex flex-wrap gap-2">
               {items.filter(isLowStock).map(item => (
                 <span key={item.id} className="bg-amber-600/20 text-amber-300 px-3 py-1 rounded text-sm">
-                  {item.name} ({item.quantity} {item.unit} left)
+                  {item.name} ({item.quantity} {item.unit} remaining)
                 </span>
               ))}
             </div>
