@@ -177,7 +177,7 @@ function ShoppingList({ user }) {
           className="mb-8"
         >
           <h1 className="text-4xl font-cinzel font-black uppercase mb-2">ROYAL PROVISIONS</h1>
-          <p className="text-zinc-400">Your shopping list from the meal plan - every ingredient you need</p>
+          <p className="text-zinc-400 italic">The sacred scrolls of ingredients for your conquests in the kitchen</p>
         </motion.div>
 
         {/* Generate New List Section */}
@@ -189,10 +189,10 @@ function ShoppingList({ user }) {
         >
           <h2 className="text-xl font-cinzel font-semibold mb-4 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-violet-500" />
-            GENERATE NEW LIST
+            SUMMON NEW PROVISIONS
           </h2>
-          <p className="text-zinc-500 text-sm mb-4">
-            Select a meal plan with AI-generated recipes to create your shopping list
+          <p className="text-zinc-500 text-sm mb-4 italic">
+            Select a meal plan blessed with recipes to conjure your shopping scroll
           </p>
           <div className="flex gap-4">
             <Select value={selectedPlan} onValueChange={setSelectedPlan}>
