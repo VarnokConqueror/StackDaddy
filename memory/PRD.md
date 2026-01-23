@@ -21,9 +21,14 @@ Build a subscription-based application that provides weekly meal plans with corr
 - [x] Delete meal plans with themed confirmation dialog ("Banish from realm")
 
 ### 2. Shopping List
-- [x] Generate shopping list from meal plan
-- [x] Display items grouped by category
-- [x] Checklist functionality for items
+- [x] Generate shopping list from meal plan recipes
+- [x] Smart ingredient aggregation (combines same ingredients)
+- [x] Parse quantities and units automatically
+- [x] Categorize items (Produce, Proteins, Dairy, etc.)
+- [x] Progress bar with check-off functionality
+- [x] Delete shopping lists
+- [x] Skip leftover meal ingredients (no double counting)
+- [x] Subtract pantry items from shopping list
 
 ### 3. Supplement Tracking
 - [x] Pre-populated supplement database (8+ supplements)
