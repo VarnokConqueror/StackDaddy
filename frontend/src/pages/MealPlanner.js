@@ -48,6 +48,8 @@ function MealPlanner({ user }) {
   const [selectedDietary, setSelectedDietary] = useState(user?.dietary_preferences || []);
   const [selectedCooking, setSelectedCooking] = useState(user?.cooking_methods || []);
   const [useAI, setUseAI] = useState(false);
+  const [servings, setServings] = useState(1);
+  const [useLeftovers, setUseLeftovers] = useState(true);
 
   useEffect(() => {
     fetchMealPlans();
