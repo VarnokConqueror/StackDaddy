@@ -223,16 +223,16 @@ function ShoppingList({ user }) {
             <Button
               onClick={generateList}
               disabled={generating || !selectedPlan}
-              className="bg-violet-600 hover:bg-violet-700 min-w-[140px]"
+              className="bg-violet-600 hover:bg-violet-700 min-w-[160px]"
               data-testid="generate-shopping-list-button"
             >
               {generating ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  GENERATING...
+                  CONJURING...
                 </>
               ) : (
-                'GENERATE LIST'
+                'SUMMON LIST'
               )}
             </Button>
           </div>
