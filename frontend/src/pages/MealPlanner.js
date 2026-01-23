@@ -318,9 +318,10 @@ function MealPlanner({ user }) {
                 data-testid={`meal-plan-${plan.id}`}
               >
                 <button
-                  onClick={() => deleteMealPlan(plan.id)}
-                  className="absolute top-4 right-4 text-zinc-600 hover:text-red-400 transition-colors"
+                  onClick={(e) => openDeleteDialog(e, plan.id)}
+                  className="absolute top-4 right-4 text-zinc-600 hover:text-red-400 transition-colors p-1"
                   data-testid={`delete-plan-${plan.id}`}
+                  aria-label="Delete meal plan"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
