@@ -65,6 +65,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard user={user} /></ProtectedRoute>} />
         <Route path="/meal-planner" element={<ProtectedRoute><MealPlanner user={user} /></ProtectedRoute>} />
         <Route path="/shopping-list" element={<ProtectedRoute><ShoppingList user={user} /></ProtectedRoute>} />
+        <Route path="/pantry" element={<ProtectedRoute><Pantry user={user} /></ProtectedRoute>} />
         <Route path="/supplements" element={<ProtectedRoute><SupplementLibrary user={user} /></ProtectedRoute>} />
         <Route path="/my-supplements" element={<ProtectedRoute><MySupplements user={user} /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile user={user} setUser={setUser} /></ProtectedRoute>} />
