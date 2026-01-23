@@ -76,7 +76,8 @@ function Profile({ user, setUser }) {
       await axios.put(`${API}/auth/preferences`, {
         dietary_preferences: dietary,
         cooking_methods: cooking,
-        health_goal: healthGoal
+        health_goal: healthGoal,
+        allergies: allergies
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
