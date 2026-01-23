@@ -98,23 +98,48 @@ function MealPlanner({ user }) {
   };
 
   const deleteMealPlan = async (planId) => {
-    if (!confirm('Delete this meal plan? This cannot be undone.')) return;
-
     const token = localStorage.getItem('token');
     try {
       await axios.delete(`${API}/meal-plans/${planId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      toast.success('Meal plan deleted');
+      toast.success('Meal plan banished from the realm');
+      setDeleteDialogOpen(false);
+      setPlanToDelete(null);
       fetchMealPlans();
     } catch (error) {
       toast.error('Failed to delete meal plan');
     }
   };
 
+  const openDeleteDialog = (e, planId) => {
+    e.stopPropagation();
+    setPlanToDelete(planId);
+    setDeleteDialogOpen(true);
+  };
+
   const viewPlan = (plan) => {
     setSelectedPlan(plan);
     setViewDialogOpen(true);
+  };
+
+  const viewRecipe = (day, mealType, mealName) => {
+    if (!mealName) return;
+    
+    const dayData = selectedPlan.days.find(d => d.day === day.day);
+    const recipe = dayData?.recipes?.[mealType] || null;
+    
+    setSelectedRecipe({
+      name: mealName,
+      mealType: mealType,
+      day: day.day,
+      ingredients: recipe?.ingredients || [],
+      instructions: recipe?.instructions || dayData?.instructions?.[mealType] || 'No detailed instructions available. Generate with AI to get full recipes.',
+      prepTime: recipe?.prep_time || null,
+      cookTime: recipe?.cook_time || null,
+      servings: recipe?.servings || null
+    });
+    setRecipeDialogOpen(true);
   };
 
   const startEditingMeal = (plan, dayIndex, mealType) => {
