@@ -240,7 +240,7 @@ function ShoppingList({ user }) {
 
         {/* Shopping Lists */}
         {loading ? (
-          <div className="text-center py-12 text-zinc-400">Loading...</div>
+          <div className="text-center py-12 text-zinc-400 italic">Consulting the royal scrolls...</div>
         ) : shoppingLists.length === 0 ? (
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
@@ -248,10 +248,10 @@ function ShoppingList({ user }) {
             className="text-center py-24"
           >
             <ShoppingCart className="w-20 h-20 text-zinc-700 mx-auto mb-6" />
-            <h2 className="text-2xl font-cinzel font-bold text-zinc-400 mb-2">NO PROVISIONS YET</h2>
-            <p className="text-zinc-500 mb-6">Generate your first shopping list from a meal plan</p>
+            <h2 className="text-2xl font-cinzel font-bold text-zinc-400 mb-2">NO SCROLLS YET</h2>
+            <p className="text-zinc-500 mb-6 italic">Your provision scrolls await their first summoning</p>
             <p className="text-zinc-600 text-sm max-w-md mx-auto">
-              First, create a meal plan with AI-generated recipes. Then come back here to generate your shopping list with exact quantities!
+              First, forge a meal plan blessed with AI-generated recipes. Then return to summon your shopping scroll with precise quantities!
             </p>
           </motion.div>
         ) : (
