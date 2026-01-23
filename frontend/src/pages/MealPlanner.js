@@ -628,6 +628,72 @@ function MealPlanner({ user }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Regenerate with Restrictions Dialog */}
+      <Dialog open={regenerateDialogOpen} onOpenChange={setRegenerateDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-cinzel flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              REGENERATE PLAN
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <p className="text-zinc-400 mb-4">
+              Your allergies from your profile will be automatically applied. Add any extra restrictions below:
+            </p>
+            
+            {user?.allergies?.length > 0 && (
+              <div className="mb-4 p-3 bg-red-600/10 border border-red-500/30 rounded">
+                <p className="text-sm text-red-300 mb-2">Current allergies (from profile):</p>
+                <div className="flex flex-wrap gap-1">
+                  {user.allergies.map((allergy) => (
+                    <span key={allergy} className="bg-red-600/20 text-red-300 px-2 py-0.5 rounded text-xs">
+                      {allergy}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <Label className="text-zinc-300 mb-2 block">Additional Request (optional)</Label>
+            <Input
+              value={extraRestriction}
+              onChange={(e) => setExtraRestriction(e.target.value)}
+              placeholder="e.g., no dairy, make it spicier, more protein..."
+              className="bg-zinc-900 border-zinc-800 mb-4"
+            />
+            
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setRegenerateDialogOpen(false)}
+                variant="outline"
+                className="flex-1 border-zinc-700 hover:bg-zinc-800"
+              >
+                CANCEL
+              </Button>
+              <Button
+                onClick={regeneratePlan}
+                disabled={regenerating}
+                className="flex-1 bg-amber-600 hover:bg-amber-700"
+                data-testid="confirm-regenerate-btn"
+              >
+                {regenerating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    REGENERATING...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    REGENERATE
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
