@@ -69,6 +69,7 @@ function App() {
         <Route path="/profile" element={<ProtectedRoute><Profile user={user} setUser={setUser} /></ProtectedRoute>} />
         <Route path="/subscription" element={<ProtectedRoute><Subscription user={user} setUser={setUser} /></ProtectedRoute>} />
         <Route path="/subscription/success" element={<ProtectedRoute><SubscriptionSuccess user={user} setUser={setUser} /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute><AdminPanel user={user} /></ProtectedRoute>} />
       </Routes>
     );
   }
