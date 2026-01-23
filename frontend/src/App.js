@@ -9,6 +9,7 @@ import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import MealPlanner from './pages/MealPlanner';
 import ShoppingList from './pages/ShoppingList';
+import Pantry from './pages/Pantry';
 import SupplementLibrary from './pages/SupplementLibrary';
 import MySupplements from './pages/MySupplements';
 import Profile from './pages/Profile';
