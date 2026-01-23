@@ -139,11 +139,34 @@ function Subscription({ user, setUser }) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-gradient-to-r from-violet-600/20 to-pink-600/20 border border-violet-500/30 p-8 text-center mb-12"
+            data-testid="premium-status-banner"
           >
             <h2 className="text-2xl font-cinzel font-bold mb-2">YOU ARE A PREMIUM MEMBER</h2>
-            <p className="text-zinc-300">
+            <p className="text-zinc-300 mb-4">
               Your subscription is active until {user.subscription_end_date && new Date(user.subscription_end_date).toLocaleDateString()}
             </p>
+            
+            {subscriptionDetails && (
+              <div className="mt-4 space-y-2">
+                {subscriptionDetails.cancel_at_period_end ? (
+                  <div className="flex items-center justify-center gap-2 text-amber-400">
+                    <AlertCircle className="w-5 h-5" />
+                    <span>Your subscription will end on {new Date(subscriptionDetails.current_period_end).toLocaleDateString()}</span>
+                  </div>
+                ) : subscriptionDetails.plan && (
+                  <Button
+                    onClick={handleCancelSubscription}
+                    disabled={cancelling}
+                    variant="outline"
+                    className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+                    data-testid="cancel-subscription-button"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    {cancelling ? 'CANCELLING...' : 'CANCEL SUBSCRIPTION'}
+                  </Button>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
 
