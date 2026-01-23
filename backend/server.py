@@ -109,6 +109,8 @@ class RecipeDetail(BaseModel):
 class MealPlanDay(BaseModel):
     day: str
     meals: Dict[str, Optional[str]]
+    meal_times: Optional[Dict[str, str]] = {}  # e.g., {"breakfast": "8:00 AM", "lunch": "12:30 PM"}
+    is_leftover: Optional[Dict[str, bool]] = {}  # e.g., {"lunch": True} means lunch is leftover from prev dinner
     instructions: Optional[Dict[str, str]] = {}
     recipes: Optional[Dict[str, RecipeDetail]] = {}
     locked: bool = False
@@ -123,7 +125,29 @@ class MealPlan(BaseModel):
     days: List[MealPlanDay]
     dietary_preferences: List[str]
     cooking_methods: List[str]
+    servings: int = 1  # Number of people/servings
     created_at: str
+    goal: Optional[str] = None
+
+# Pantry item for tracking user's ingredients
+class PantryItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    name: str
+    quantity: float
+    unit: str
+    category: str  # spices, oils, grains, etc.
+    low_stock_threshold: Optional[float] = None
+    created_at: str
+    updated_at: str
+
+class PantryItemCreate(BaseModel):
+    name: str
+    quantity: float
+    unit: str
+    category: str
+    low_stock_threshold: Optional[float] = None
 
 class ShoppingListItem(BaseModel):
     name: str
