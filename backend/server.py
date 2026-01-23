@@ -808,7 +808,7 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     
     plan_days = [
-        {"day": day, "meals": {"breakfast": None, "lunch": None, "dinner": None, "snack": None}, "locked": False}
+        {"day": day, "meals": {"breakfast": None, "lunch": None, "dinner": None, "snack": None}, "instructions": {}, "recipes": {}, "locked": False}
         for day in days
     ]
     
