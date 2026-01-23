@@ -338,6 +338,67 @@ function Profile({ user, setUser }) {
             ))}
           </div>
 
+          <h3 className="text-lg font-cinzel font-semibold mb-4 mt-6 text-red-400">ALLERGIES & RESTRICTIONS</h3>
+          <p className="text-zinc-500 text-sm mb-3">AI will never generate meals containing these ingredients</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+            {COMMON_ALLERGIES.map((allergy) => (
+              <div key={allergy} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`allergy-${allergy}`}
+                  checked={allergies.includes(allergy)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAllergies([...allergies, allergy]);
+                    } else {
+                      setAllergies(allergies.filter(a => a !== allergy));
+                    }
+                  }}
+                  data-testid={`allergy-${allergy.toLowerCase().replace(' ', '-')}`}
+                  className="border-red-500/50 data-[state=checked]:bg-red-600"
+                />
+                <label htmlFor={`allergy-${allergy}`} className="text-zinc-400 cursor-pointer text-sm">{allergy}</label>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 mb-4">
+            <Input
+              value={customAllergy}
+              onChange={(e) => setCustomAllergy(e.target.value)}
+              placeholder="Add custom restriction..."
+              className="bg-zinc-900 border-zinc-800 flex-1"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && customAllergy.trim()) {
+                  if (!allergies.includes(customAllergy.trim())) {
+                    setAllergies([...allergies, customAllergy.trim()]);
+                  }
+                  setCustomAllergy('');
+                }
+              }}
+            />
+            <Button
+              onClick={() => {
+                if (customAllergy.trim() && !allergies.includes(customAllergy.trim())) {
+                  setAllergies([...allergies, customAllergy.trim()]);
+                  setCustomAllergy('');
+                }
+              }}
+              variant="outline"
+              className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+            >
+              ADD
+            </Button>
+          </div>
+          {allergies.filter(a => !COMMON_ALLERGIES.includes(a)).length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {allergies.filter(a => !COMMON_ALLERGIES.includes(a)).map((allergy) => (
+                <span key={allergy} className="bg-red-600/20 text-red-300 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                  {allergy}
+                  <button onClick={() => setAllergies(allergies.filter(a => a !== allergy))} className="hover:text-white">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+
           <Button
             onClick={savePreferences}
             disabled={saving}
