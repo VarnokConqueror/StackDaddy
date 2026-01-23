@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Navigation from '@/components/Navigation';
 import PromoCodeSection from '@/components/PromoCodeSection';
 import { Button } from '@/components/ui/button';
-import { Crown, Check } from 'lucide-react';
+import { Crown, Check, XCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -12,6 +12,68 @@ const API = `${BACKEND_URL}/api`;
 
 function Subscription({ user, setUser }) {
   const [processing, setProcessing] = useState(false);
+  const [subscriptionDetails, setSubscriptionDetails] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    if (user?.subscription_status === 'active') {
+      fetchSubscriptionDetails();
+    }
+  }, [user]);
+
+  // Check for session_id in URL (returning from Stripe)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    if (sessionId) {
+      pollPaymentStatus(sessionId);
+    }
+  }, []);
+
+  const fetchSubscriptionDetails = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get(`${API}/subscriptions/details`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSubscriptionDetails(response.data);
+    } catch (error) {
+      console.error('Failed to fetch subscription details');
+    }
+  };
+
+  const pollPaymentStatus = async (sessionId, attempts = 0) => {
+    const maxAttempts = 5;
+    const token = localStorage.getItem('token');
+
+    if (attempts >= maxAttempts) {
+      toast.info('Payment status check timed out. Please refresh the page.');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API}/subscriptions/status/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.payment_status === 'paid') {
+        toast.success('Payment successful! Welcome to Premium!');
+        // Refresh user data
+        const userRes = await axios.get(`${API}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUser(userRes.data);
+        // Clean up URL
+        window.history.replaceState({}, '', '/subscription');
+        return;
+      }
+
+      // Continue polling
+      setTimeout(() => pollPaymentStatus(sessionId, attempts + 1), 2000);
+    } catch (error) {
+      console.error('Error checking payment status');
+    }
+  };
 
   const handleSubscribe = async (packageId) => {
     setProcessing(true);
@@ -28,8 +90,30 @@ function Subscription({ user, setUser }) {
       
       window.location.href = response.data.url;
     } catch (error) {
-      toast.error('Failed to initiate checkout');
+      toast.error(error.response?.data?.detail || 'Failed to initiate checkout');
       setProcessing(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your billing period.')) {
+      return;
+    }
+
+    setCancelling(true);
+    const token = localStorage.getItem('token');
+    
+    try {
+      const response = await axios.post(`${API}/subscriptions/cancel`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      toast.success(response.data.message);
+      fetchSubscriptionDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to cancel subscription');
+    } finally {
+      setCancelling(false);
     }
   };
 
