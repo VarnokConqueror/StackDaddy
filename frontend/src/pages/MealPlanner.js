@@ -392,29 +392,42 @@ function MealPlanner({ user }) {
                     <h3 className="text-lg font-cinzel font-semibold mb-3 text-violet-400">{day.day}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {['breakfast', 'lunch', 'dinner', 'snack'].map((mealType) => (
-                        <div key={mealType} className="group bg-zinc-800/30 p-3 rounded">
-                          <p className="text-zinc-500 font-semibold capitalize mb-1">{mealType}:</p>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1">
-                              <p className="text-zinc-300">
-                                {day.meals[mealType] || <span className="text-zinc-600 italic">Click edit to add</span>}
-                              </p>
-                              {day.meals[mealType] && (
+                        <div 
+                          key={mealType} 
+                          className="group bg-zinc-800/30 p-3 rounded cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                          onClick={() => !day.meals[mealType] && startEditingMeal(selectedPlan, dayIdx, mealType)}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-zinc-500 font-semibold capitalize">{mealType}:</p>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditingMeal(selectedPlan, dayIdx, mealType);
+                              }}
+                              className="text-violet-400 hover:text-violet-300 p-1"
+                              title="Edit meal"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div>
+                            {day.meals[mealType] ? (
+                              <>
+                                <p className="text-zinc-300">{day.meals[mealType]}</p>
                                 <button
-                                  onClick={() => viewRecipe(day, mealType, day.meals[mealType])}
-                                  className="text-xs text-violet-400 hover:text-violet-300 mt-1 flex items-center gap-1 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    viewRecipe(day, mealType, day.meals[mealType]);
+                                  }}
+                                  className="text-xs text-violet-400 hover:text-violet-300 mt-2 flex items-center gap-1 transition-colors"
                                 >
                                   <ScrollText className="w-3 h-3" />
                                   View Royal Recipe
                                 </button>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => startEditingMeal(selectedPlan, dayIdx, mealType)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-violet-400 hover:text-violet-300 p-1"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
+                              </>
+                            ) : (
+                              <p className="text-zinc-600 italic text-sm">Click to add meal</p>
+                            )}
                           </div>
                         </div>
                       ))}
