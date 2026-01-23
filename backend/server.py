@@ -612,6 +612,108 @@ async def get_oauth_status():
         "facebook": bool(os.environ.get('FACEBOOK_APP_ID') and os.environ.get('FACEBOOK_APP_SECRET'))
     }
 
+# ============== Promo Code Routes ==============
+
+class PromoCodeRedeem(BaseModel):
+    code: str
+
+@api_router.post("/promo/redeem")
+async def redeem_promo_code(promo_data: PromoCodeRedeem, authorization: str = Header(None)):
+    """Redeem a promo code for lifetime premium access"""
+    user = await get_current_user(authorization)
+    
+    # Check if promo code exists and is valid
+    promo = await db.promo_codes.find_one({"code": promo_data.code.upper()}, {"_id": 0})
+    
+    if not promo:
+        raise HTTPException(status_code=404, detail="Invalid promo code")
+    
+    if not promo.get("active", True):
+        raise HTTPException(status_code=400, detail="Promo code has been deactivated")
+    
+    # Check if already used by this user
+    if user["id"] in promo.get("used_by", []):
+        raise HTTPException(status_code=400, detail="You've already used this promo code")
+    
+    # Check usage limit
+    max_uses = promo.get("max_uses", 0)
+    current_uses = len(promo.get("used_by", []))
+    if max_uses > 0 and current_uses >= max_uses:
+        raise HTTPException(status_code=400, detail="Promo code has reached maximum uses")
+    
+    # Grant lifetime premium
+    lifetime_end = datetime(2099, 12, 31, tzinfo=timezone.utc).isoformat()
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "subscription_status": "active",
+            "subscription_end_date": lifetime_end,
+            "promo_code_used": promo_data.code.upper()
+        }}
+    )
+    
+    # Mark promo code as used
+    await db.promo_codes.update_one(
+        {"code": promo_data.code.upper()},
+        {
+            "$push": {"used_by": user["id"]},
+            "$inc": {"use_count": 1}
+        }
+    )
+    
+    return {
+        "message": "Promo code redeemed! You now have lifetime premium access.",
+        "subscription_status": "active",
+        "subscription_end_date": lifetime_end
+    }
+
+@api_router.post("/admin/promo/create")
+async def create_promo_code(
+    code: str,
+    max_uses: int = 0,
+    authorization: str = Header(None)
+):
+    """Create a new promo code (admin only)"""
+    user = await get_current_user(authorization)
+    
+    # Check if user is admin
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Check if code already exists
+    existing = await db.promo_codes.find_one({"code": code.upper()}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Promo code already exists")
+    
+    promo_doc = {
+        "code": code.upper(),
+        "max_uses": max_uses,  # 0 = unlimited
+        "use_count": 0,
+        "used_by": [],
+        "active": True,
+        "created_by": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.promo_codes.insert_one(promo_doc)
+    
+    return {
+        "message": "Promo code created successfully",
+        "code": code.upper(),
+        "max_uses": max_uses
+    }
+
+@api_router.get("/admin/promo/list")
+async def list_promo_codes(authorization: str = Header(None)):
+    """List all promo codes (admin only)"""
+    user = await get_current_user(authorization)
+    
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    promos = await db.promo_codes.find({}, {"_id": 0}).to_list(1000)
+    return promos
+
 
 # ============== Meal Routes ==============
 
