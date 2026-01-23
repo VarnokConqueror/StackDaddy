@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import Navigation from '@/components/Navigation';
+import PromoCodeSection from '@/components/PromoCodeSection';
 import { Button } from '@/components/ui/button';
 import { Crown, Check } from 'lucide-react';
 import { toast } from 'sonner';
