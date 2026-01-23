@@ -1019,6 +1019,157 @@ async def update_meal_plan(
     
     return {"message": "Meal plan updated"}
 
+class RegenerateRequest(BaseModel):
+    extra_restriction: Optional[str] = None
+
+@api_router.post("/meal-plans/{plan_id}/regenerate", response_model=MealPlan)
+async def regenerate_meal_plan(
+    plan_id: str,
+    regen_data: RegenerateRequest,
+    authorization: str = Header(None)
+):
+    """Regenerate meal plan with AI using user's allergies and extra restrictions"""
+    user = await get_current_user(authorization)
+    
+    # Get existing plan
+    plan = await db.meal_plans.find_one({"id": plan_id, "user_id": user["id"]}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Meal plan not found")
+    
+    # Get AI config
+    ai_config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not ai_config or not ai_config.get("api_key"):
+        raise HTTPException(status_code=400, detail="Please configure your AI API key in Profile first")
+    
+    # Build allergies list
+    user_allergies = user.get("allergies", [])
+    all_restrictions = list(user_allergies)
+    if regen_data.extra_restriction:
+        all_restrictions.append(regen_data.extra_restriction)
+    
+    restrictions_text = ""
+    if all_restrictions:
+        restrictions_text = f"CRITICAL RESTRICTIONS - NEVER INCLUDE: {', '.join(all_restrictions)}\n"
+    
+    dietary_prefs = plan.get("dietary_preferences", [])
+    cooking_methods = plan.get("cooking_methods", [])
+    goal = plan.get("goal", "")
+    
+    goal_context = ""
+    if goal:
+        goal_map = {
+            "lose_weight": "focused on calorie deficit, high protein, lower carbs for weight loss",
+            "gain_weight": "calorie surplus with nutrient-dense foods for healthy weight gain",
+            "gain_muscle": "high protein (1g per lb bodyweight), balanced carbs and fats for muscle building",
+            "eat_healthy": "balanced nutrition, whole foods, variety of nutrients",
+            "increase_energy": "complex carbs, B vitamins, sustained energy foods",
+            "improve_digestion": "fiber-rich, probiotic foods, gentle on stomach"
+        }
+        goal_context = f"Goal: {goal_map.get(goal, 'balanced nutrition')}\n"
+    
+    try:
+        chat = LlmChat(
+            api_key=ai_config["api_key"]
+        ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
+        
+        prompt = f"""Generate a complete 7-day weekly meal plan with DETAILED recipes.
+
+{restrictions_text}{goal_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
+Cooking methods available: {', '.join(cooking_methods) if cooking_methods else 'Any'}
+
+For each day (Monday through Sunday), provide:
+- Breakfast with FULL recipe
+- Lunch with FULL recipe
+- Dinner with FULL recipe
+- Snack (simple)
+
+Each recipe MUST include:
+1. A list of ALL ingredients with exact quantities (e.g., "2 cups spinach", "1 tbsp olive oil")
+2. Detailed step-by-step cooking instructions (at least 4-6 steps)
+3. Prep time and cook time in minutes
+4. Number of servings
+
+IMPORTANT: DO NOT include any ingredients that contain or are derived from: {', '.join(all_restrictions) if all_restrictions else 'nothing restricted'}
+
+Respond ONLY with valid JSON in this exact format:
+{{
+  "days": [
+    {{
+      "day": "Monday",
+      "breakfast": "Meal name",
+      "breakfast_recipe": {{
+        "ingredients": ["2 large eggs", "1 cup spinach", "1/4 cup feta cheese", "1 tbsp olive oil", "Salt and pepper to taste"],
+        "instructions": "1. Heat olive oil in a non-stick pan over medium heat.\\n2. Add spinach and sauté for 2 minutes until wilted.\\n3. Crack eggs into the pan and scramble with the spinach.\\n4. Cook for 3-4 minutes until eggs are set but still moist.\\n5. Remove from heat, crumble feta cheese on top.\\n6. Season with salt and pepper, serve immediately.",
+        "prep_time": 5,
+        "cook_time": 10,
+        "servings": 1
+      }},
+      "lunch": "Meal name",
+      "lunch_recipe": {{...}},
+      "dinner": "Meal name",
+      "dinner_recipe": {{...}},
+      "snack": "Snack name"
+    }}
+  ]
+}}"""
+        
+        response = await chat.send_message(UserMessage(text=prompt))
+        
+        # Parse AI response
+        import json
+        response_text = response if isinstance(response, str) else str(response)
+        start_idx = response_text.find('{')
+        end_idx = response_text.rfind('}') + 1
+        
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        plan_days = [
+            {"day": day, "meals": {"breakfast": None, "lunch": None, "dinner": None, "snack": None}, "instructions": {}, "recipes": {}, "locked": False}
+            for day in days
+        ]
+        
+        if start_idx != -1 and end_idx > start_idx:
+            json_str = response_text[start_idx:end_idx]
+            ai_data = json.loads(json_str)
+            
+            if "days" in ai_data:
+                for i, ai_day in enumerate(ai_data["days"]):
+                    if i < len(plan_days):
+                        plan_days[i]["meals"]["breakfast"] = ai_day.get("breakfast", "")
+                        plan_days[i]["meals"]["lunch"] = ai_day.get("lunch", "")
+                        plan_days[i]["meals"]["dinner"] = ai_day.get("dinner", "")
+                        plan_days[i]["meals"]["snack"] = ai_day.get("snack", "")
+                        
+                        plan_days[i]["recipes"] = {}
+                        plan_days[i]["instructions"] = {}
+                        
+                        for meal_type in ["breakfast", "lunch", "dinner"]:
+                            recipe_key = f"{meal_type}_recipe"
+                            if recipe_key in ai_day and ai_day[recipe_key]:
+                                recipe = ai_day[recipe_key]
+                                plan_days[i]["recipes"][meal_type] = {
+                                    "ingredients": recipe.get("ingredients", []),
+                                    "instructions": recipe.get("instructions", ""),
+                                    "prep_time": recipe.get("prep_time"),
+                                    "cook_time": recipe.get("cook_time"),
+                                    "servings": recipe.get("servings")
+                                }
+                                plan_days[i]["instructions"][meal_type] = f"Prep: {recipe.get('prep_time', '?')} min | Cook: {recipe.get('cook_time', '?')} min"
+                        
+                        plan_days[i]["instructions"]["snack"] = ""
+        
+        # Update the plan
+        await db.meal_plans.update_one(
+            {"id": plan_id, "user_id": user["id"]},
+            {"$set": {"days": plan_days}}
+        )
+        
+        updated_plan = await db.meal_plans.find_one({"id": plan_id, "user_id": user["id"]}, {"_id": 0})
+        return MealPlan(**updated_plan)
+        
+    except Exception as e:
+        logging.error(f"AI regeneration error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
 # ============== Shopping List Routes ==============
 
 @api_router.post("/shopping-lists", response_model=ShoppingList)
