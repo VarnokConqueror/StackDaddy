@@ -778,6 +778,24 @@ async def list_promo_codes(authorization: str = Header(None)):
     promos = await db.promo_codes.find({}, {"_id": 0}).to_list(1000)
     return promos
 
+@api_router.delete("/admin/promo/{code}")
+async def revoke_promo_code(code: str, authorization: str = Header(None)):
+    """Revoke/delete a promo code (admin only)"""
+    user = await get_current_user(authorization)
+    
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.promo_codes.update_one(
+        {"code": code.upper()},
+        {"$set": {"active": False}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Promo code not found")
+    
+    return {"message": "Promo code revoked"}
+
 
 # ============== Meal Routes ==============
 
