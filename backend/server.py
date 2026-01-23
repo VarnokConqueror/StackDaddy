@@ -1172,6 +1172,85 @@ Respond ONLY with valid JSON in this exact format:
 
 # ============== Shopping List Routes ==============
 
+# Category mapping for common ingredients
+INGREDIENT_CATEGORIES = {
+    # Proteins
+    "chicken": "Proteins", "beef": "Proteins", "pork": "Proteins", "fish": "Proteins",
+    "salmon": "Proteins", "tuna": "Proteins", "shrimp": "Proteins", "turkey": "Proteins",
+    "egg": "Proteins", "eggs": "Proteins", "tofu": "Proteins", "tempeh": "Proteins",
+    # Dairy
+    "milk": "Dairy", "cheese": "Dairy", "yogurt": "Dairy", "butter": "Dairy",
+    "cream": "Dairy", "feta": "Dairy", "parmesan": "Dairy", "mozzarella": "Dairy",
+    # Produce
+    "spinach": "Produce", "lettuce": "Produce", "tomato": "Produce", "onion": "Produce",
+    "garlic": "Produce", "pepper": "Produce", "carrot": "Produce", "broccoli": "Produce",
+    "cucumber": "Produce", "avocado": "Produce", "lemon": "Produce", "lime": "Produce",
+    "apple": "Produce", "banana": "Produce", "berry": "Produce", "berries": "Produce",
+    "mushroom": "Produce", "zucchini": "Produce", "potato": "Produce", "sweet potato": "Produce",
+    # Grains
+    "rice": "Grains & Bread", "pasta": "Grains & Bread", "bread": "Grains & Bread",
+    "oats": "Grains & Bread", "quinoa": "Grains & Bread", "tortilla": "Grains & Bread",
+    # Pantry
+    "oil": "Pantry", "olive oil": "Pantry", "salt": "Pantry", "pepper": "Pantry",
+    "sugar": "Pantry", "flour": "Pantry", "honey": "Pantry", "vinegar": "Pantry",
+    "soy sauce": "Pantry", "sauce": "Pantry", "broth": "Pantry", "stock": "Pantry",
+    # Nuts & Seeds
+    "almond": "Nuts & Seeds", "walnut": "Nuts & Seeds", "peanut": "Nuts & Seeds",
+    "cashew": "Nuts & Seeds", "seed": "Nuts & Seeds", "nut": "Nuts & Seeds",
+}
+
+def categorize_ingredient(ingredient_name: str) -> str:
+    """Determine category based on ingredient name"""
+    name_lower = ingredient_name.lower()
+    for keyword, category in INGREDIENT_CATEGORIES.items():
+        if keyword in name_lower:
+            return category
+    return "Other"
+
+def parse_ingredient_string(ingredient_str: str) -> dict:
+    """Parse ingredient string like '2 cups spinach' into structured data"""
+    import re
+    
+    # Common patterns: "2 cups spinach", "1/2 cup milk", "1 tbsp olive oil"
+    pattern = r'^([\d\/\.\s]+)?\s*(cups?|tbsp|tsp|oz|lb|g|kg|ml|l|bunch|cloves?|pieces?|slices?|cans?|bottles?|packages?|stalks?)?\s*(.+)$'
+    match = re.match(pattern, ingredient_str.strip(), re.IGNORECASE)
+    
+    if match:
+        quantity_str = match.group(1) or "1"
+        unit = match.group(2) or "unit"
+        name = match.group(3) or ingredient_str
+        
+        # Parse quantity (handle fractions)
+        try:
+            if '/' in quantity_str:
+                parts = quantity_str.strip().split()
+                total = 0
+                for part in parts:
+                    if '/' in part:
+                        num, denom = part.split('/')
+                        total += float(num) / float(denom)
+                    else:
+                        total += float(part) if part else 0
+                quantity = total
+            else:
+                quantity = float(quantity_str.strip()) if quantity_str.strip() else 1
+        except:
+            quantity = 1
+        
+        return {
+            "name": name.strip(),
+            "quantity": quantity,
+            "unit": unit.lower(),
+            "category": categorize_ingredient(name)
+        }
+    
+    return {
+        "name": ingredient_str.strip(),
+        "quantity": 1,
+        "unit": "unit",
+        "category": categorize_ingredient(ingredient_str)
+    }
+
 @api_router.post("/shopping-lists", response_model=ShoppingList)
 async def generate_shopping_list(meal_plan_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
@@ -1182,28 +1261,48 @@ async def generate_shopping_list(meal_plan_id: str, authorization: str = Header(
     
     all_ingredients = {}
     
-    for day in plan["days"]:
-        for meal_type, meal_id in day["meals"].items():
-            if meal_id:
-                meal = await db.meals.find_one({"id": meal_id}, {"_id": 0})
-                if meal:
-                    for ingredient in meal.get("ingredients", []):
-                        name = ingredient["name"]
-                        quantity = ingredient.get("quantity", 1)
-                        unit = ingredient.get("unit", "unit")
-                        category = ingredient.get("category", "other")
-                        
-                        key = f"{name}_{unit}_{category}"
-                        if key in all_ingredients:
-                            all_ingredients[key]["quantity"] += quantity
-                        else:
-                            all_ingredients[key] = {
-                                "name": name,
-                                "quantity": quantity,
-                                "unit": unit,
-                                "category": category,
-                                "checked": False
-                            }
+    # Extract ingredients from meal plan recipes
+    for day in plan.get("days", []):
+        recipes = day.get("recipes", {})
+        
+        for meal_type in ["breakfast", "lunch", "dinner", "snack"]:
+            recipe = recipes.get(meal_type, {})
+            ingredients_list = recipe.get("ingredients", [])
+            
+            for ingredient in ingredients_list:
+                # Handle both string and dict formats
+                if isinstance(ingredient, str):
+                    parsed = parse_ingredient_string(ingredient)
+                elif isinstance(ingredient, dict):
+                    parsed = {
+                        "name": ingredient.get("name", "Unknown"),
+                        "quantity": ingredient.get("quantity", 1),
+                        "unit": ingredient.get("unit", "unit"),
+                        "category": ingredient.get("category") or categorize_ingredient(ingredient.get("name", ""))
+                    }
+                else:
+                    continue
+                
+                # Aggregate by name + unit
+                key = f"{parsed['name'].lower()}_{parsed['unit']}"
+                if key in all_ingredients:
+                    all_ingredients[key]["quantity"] += parsed["quantity"]
+                else:
+                    all_ingredients[key] = {
+                        "name": parsed["name"],
+                        "quantity": parsed["quantity"],
+                        "unit": parsed["unit"],
+                        "category": parsed["category"],
+                        "checked": False
+                    }
+    
+    # Round quantities for cleaner display
+    for key in all_ingredients:
+        qty = all_ingredients[key]["quantity"]
+        if qty == int(qty):
+            all_ingredients[key]["quantity"] = int(qty)
+        else:
+            all_ingredients[key]["quantity"] = round(qty, 2)
     
     list_id = str(uuid.uuid4())
     list_doc = {
