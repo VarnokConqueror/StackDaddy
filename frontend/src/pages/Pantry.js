@@ -378,12 +378,12 @@ function Pantry({ user }) {
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl font-cinzel text-red-400">
-              REMOVE FROM PANTRY?
+              DISCARD THIS PROVISION?
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
-            <p className="text-zinc-400 mb-6">
-              This will remove this item from your pantry tracking.
+            <p className="text-zinc-400 mb-6 italic">
+              This item shall be struck from your royal inventory. The Court will no longer track it.
             </p>
             <div className="flex gap-3">
               <Button
@@ -391,13 +391,13 @@ function Pantry({ user }) {
                 variant="outline"
                 className="flex-1 border-zinc-700 hover:bg-zinc-800"
               >
-                CANCEL
+                KEEP IT
               </Button>
               <Button
                 onClick={deleteItem}
                 className="flex-1 bg-red-600 hover:bg-red-700"
               >
-                REMOVE
+                DISCARD
               </Button>
             </div>
           </div>
