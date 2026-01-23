@@ -375,12 +375,12 @@ function MealPlanner({ user }) {
                     </p>
                   )}
                   <p className="text-zinc-400">
-                    <strong className="text-zinc-300">Dietary:</strong>{' '}
-                    {plan.dietary_preferences.join(', ') || 'None'}
+                    <strong className="text-zinc-300">Servings:</strong>{' '}
+                    {plan.servings || 1} {plan.servings === 1 ? 'person' : 'people'}
                   </p>
                   <p className="text-zinc-400">
-                    <strong className="text-zinc-300">Cooking:</strong>{' '}
-                    {plan.cooking_methods.join(', ') || 'None'}
+                    <strong className="text-zinc-300">Dietary:</strong>{' '}
+                    {plan.dietary_preferences?.join(', ') || 'None'}
                   </p>
                 </div>
 
