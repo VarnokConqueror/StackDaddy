@@ -463,6 +463,21 @@ function MealPlanner({ user }) {
                   </div>
                 ))}
               </div>
+              
+              {/* Regenerate Button */}
+              <div className="mt-6 pt-4 border-t border-zinc-800">
+                <Button
+                  onClick={() => setRegenerateDialogOpen(true)}
+                  className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
+                  data-testid="regenerate-plan-button"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  REGENERATE WITH AI (NEW RESTRICTIONS)
+                </Button>
+                <p className="text-xs text-zinc-500 mt-2 text-center">
+                  Add allergies or request changes like "no peanuts" or "make it spicier"
+                </p>
+              </div>
             </div>
           )}
         </DialogContent>
