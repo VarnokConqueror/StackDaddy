@@ -98,10 +98,18 @@ class MealPlanCreate(BaseModel):
     cooking_methods: List[str] = []
     generate_with_ai: bool = False
 
+class RecipeDetail(BaseModel):
+    ingredients: List[str] = []
+    instructions: str = ""
+    prep_time: Optional[int] = None
+    cook_time: Optional[int] = None
+    servings: Optional[int] = None
+
 class MealPlanDay(BaseModel):
     day: str
     meals: Dict[str, Optional[str]]
     instructions: Optional[Dict[str, str]] = {}
+    recipes: Optional[Dict[str, RecipeDetail]] = {}
     locked: bool = False
 
 class MealPlan(BaseModel):
