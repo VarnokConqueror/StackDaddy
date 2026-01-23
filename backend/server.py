@@ -847,17 +847,24 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
                 if allergies:
                     allergy_context = f"ALLERGIES/RESTRICTIONS: Avoid {', '.join(allergies)}\n"
                 
-                prompt = f"""Generate a complete 7-day weekly meal plan with these specifications:
+                prompt = f"""Generate a complete 7-day weekly meal plan with DETAILED recipes.
+
 {goal_context}{allergy_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
-Cooking methods: {', '.join(cooking_methods) if cooking_methods else 'Any'}
+Cooking methods available: {', '.join(cooking_methods) if cooking_methods else 'Any'}
 
-For each day (Monday through Sunday), provide SPECIFIC meal names and brief cooking instructions:
-- Breakfast (with 1-2 sentence cooking instruction)
-- Lunch (with 1-2 sentence cooking instruction)
-- Dinner (with 1-2 sentence cooking instruction)
-- Snack (simple, no cooking needed)
+For each day (Monday through Sunday), provide:
+- Breakfast with FULL recipe
+- Lunch with FULL recipe
+- Dinner with FULL recipe
+- Snack (simple)
 
-Keep meals practical, easy to prepare, appropriate for the goal, and include variety.
+Each recipe MUST include:
+1. A list of ALL ingredients with exact quantities (e.g., "2 cups spinach", "1 tbsp olive oil")
+2. Detailed step-by-step cooking instructions (at least 4-6 steps)
+3. Prep time and cook time in minutes
+4. Number of servings
+
+Keep meals practical, delicious, and aligned with the goal.
 
 Respond ONLY with valid JSON in this exact format:
 {{
@@ -865,11 +872,29 @@ Respond ONLY with valid JSON in this exact format:
     {{
       "day": "Monday",
       "breakfast": "Meal name",
-      "breakfast_instructions": "Brief cooking steps",
-      "lunch": "Meal name", 
-      "lunch_instructions": "Brief cooking steps",
+      "breakfast_recipe": {{
+        "ingredients": ["2 large eggs", "1 cup spinach", "1/4 cup feta cheese", "1 tbsp olive oil", "Salt and pepper to taste"],
+        "instructions": "1. Heat olive oil in a non-stick pan over medium heat.\\n2. Add spinach and sauté for 2 minutes until wilted.\\n3. Crack eggs into the pan and scramble with the spinach.\\n4. Cook for 3-4 minutes until eggs are set but still moist.\\n5. Remove from heat, crumble feta cheese on top.\\n6. Season with salt and pepper, serve immediately.",
+        "prep_time": 5,
+        "cook_time": 10,
+        "servings": 1
+      }},
+      "lunch": "Meal name",
+      "lunch_recipe": {{
+        "ingredients": ["ingredient list"],
+        "instructions": "Detailed multi-step instructions",
+        "prep_time": 10,
+        "cook_time": 15,
+        "servings": 1
+      }},
       "dinner": "Meal name",
-      "dinner_instructions": "Brief cooking steps",
+      "dinner_recipe": {{
+        "ingredients": ["ingredient list"],
+        "instructions": "Detailed multi-step instructions",
+        "prep_time": 15,
+        "cook_time": 25,
+        "servings": 2
+      }},
       "snack": "Snack name"
     }}
   ]
@@ -901,13 +926,25 @@ Respond ONLY with valid JSON in this exact format:
                                     plan_days[i]["meals"]["dinner"] = ai_day.get("dinner", "")
                                     plan_days[i]["meals"]["snack"] = ai_day.get("snack", "")
                                     
-                                    # Add cooking instructions
-                                    plan_days[i]["instructions"] = {
-                                        "breakfast": ai_day.get("breakfast_instructions", ""),
-                                        "lunch": ai_day.get("lunch_instructions", ""),
-                                        "dinner": ai_day.get("dinner_instructions", ""),
-                                        "snack": ""
-                                    }
+                                    # Add detailed recipes
+                                    plan_days[i]["recipes"] = {}
+                                    plan_days[i]["instructions"] = {}
+                                    
+                                    for meal_type in ["breakfast", "lunch", "dinner"]:
+                                        recipe_key = f"{meal_type}_recipe"
+                                        if recipe_key in ai_day and ai_day[recipe_key]:
+                                            recipe = ai_day[recipe_key]
+                                            plan_days[i]["recipes"][meal_type] = {
+                                                "ingredients": recipe.get("ingredients", []),
+                                                "instructions": recipe.get("instructions", ""),
+                                                "prep_time": recipe.get("prep_time"),
+                                                "cook_time": recipe.get("cook_time"),
+                                                "servings": recipe.get("servings")
+                                            }
+                                            # Also store short instruction reference
+                                            plan_days[i]["instructions"][meal_type] = f"Prep: {recipe.get('prep_time', '?')} min | Cook: {recipe.get('cook_time', '?')} min"
+                                    
+                                    plan_days[i]["instructions"]["snack"] = ""
                 except Exception as parse_error:
                     logging.error(f"Failed to parse AI response: {parse_error}")
                     # Continue with empty meals
