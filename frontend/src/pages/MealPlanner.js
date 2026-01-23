@@ -365,9 +365,16 @@ function MealPlanner({ user }) {
                         <div key={mealType} className="group">
                           <p className="text-zinc-500 font-semibold capitalize mb-1">{mealType}:</p>
                           <div className="flex items-center gap-2">
-                            <p className="text-zinc-300 flex-1">
-                              {day.meals[mealType] || <span className="text-zinc-600 italic">Click edit to add</span>}
-                            </p>
+                            <div className="flex-1">
+                              <p className="text-zinc-300">
+                                {day.meals[mealType] || <span className="text-zinc-600 italic">Click edit to add</span>}
+                              </p>
+                              {day.instructions && day.instructions[mealType] && (
+                                <p className="text-xs text-zinc-500 mt-1 italic">
+                                  {day.instructions[mealType]}
+                                </p>
+                              )}
+                            </div>
                             <button
                               onClick={() => startEditingMeal(selectedPlan, dayIdx, mealType)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity text-violet-400 hover:text-violet-300"
