@@ -894,24 +894,36 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
                 if allergies:
                     allergy_context = f"ALLERGIES/RESTRICTIONS: Avoid {', '.join(allergies)}\n"
                 
-                prompt = f"""Generate a complete 7-day weekly meal plan with DETAILED recipes.
+                # Leftover instructions
+                leftover_context = ""
+                if use_leftovers:
+                    leftover_context = """IMPORTANT - LEFTOVER STRATEGY:
+To minimize ingredients and food waste, plan dinners that make extra portions for the NEXT day's lunch.
+Mark these lunches as leftovers by setting "is_leftover": true for that lunch.
+For leftover lunches, use the SAME recipe as the previous night's dinner (just reference it, don't duplicate ingredients).
+This means: Monday dinner → Tuesday lunch (leftover), Tuesday dinner → Wednesday lunch (leftover), etc.
 
-{goal_context}{allergy_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
+"""
+                
+                prompt = f"""Generate a complete 7-day weekly meal plan with DETAILED recipes for {servings} person(s).
+
+{goal_context}{allergy_context}{leftover_context}Dietary preferences: {', '.join(dietary_prefs) if dietary_prefs else 'None'}
 Cooking methods available: {', '.join(cooking_methods) if cooking_methods else 'Any'}
+Servings per meal: {servings}
 
 For each day (Monday through Sunday), provide:
 - Breakfast with FULL recipe
-- Lunch with FULL recipe
-- Dinner with FULL recipe
+- Lunch (can be leftover from previous dinner - mark with is_leftover: true)
+- Dinner with FULL recipe (make extra for next day's lunch if using leftovers)
 - Snack (simple)
 
 Each recipe MUST include:
-1. A list of ALL ingredients with exact quantities (e.g., "2 cups spinach", "1 tbsp olive oil")
+1. A list of ALL ingredients with exact quantities for {servings} serving(s) (e.g., "2 cups spinach", "1 tbsp olive oil")
 2. Detailed step-by-step cooking instructions (at least 4-6 steps)
 3. Prep time and cook time in minutes
-4. Number of servings
+4. Number of servings (should be {servings}, or {servings * 2} for dinners if making leftovers)
 
-Keep meals practical, delicious, and aligned with the goal.
+Keep meals practical, delicious, and aligned with the goal. Reuse common ingredients across meals to minimize shopping.
 
 Respond ONLY with valid JSON in this exact format:
 {{
@@ -924,19 +936,20 @@ Respond ONLY with valid JSON in this exact format:
         "instructions": "1. Heat olive oil in a non-stick pan over medium heat.\\n2. Add spinach and sauté for 2 minutes until wilted.\\n3. Crack eggs into the pan and scramble with the spinach.\\n4. Cook for 3-4 minutes until eggs are set but still moist.\\n5. Remove from heat, crumble feta cheese on top.\\n6. Season with salt and pepper, serve immediately.",
         "prep_time": 5,
         "cook_time": 10,
-        "servings": 1
+        "servings": {servings}
       }},
       "lunch": "Meal name",
+      "lunch_is_leftover": false,
       "lunch_recipe": {{
         "ingredients": ["ingredient list"],
         "instructions": "Detailed multi-step instructions",
         "prep_time": 10,
         "cook_time": 15,
-        "servings": 1
+        "servings": {servings}
       }},
       "dinner": "Meal name",
       "dinner_recipe": {{
-        "ingredients": ["ingredient list"],
+        "ingredients": ["ingredient list - make extra for tomorrow's lunch"],
         "instructions": "Detailed multi-step instructions",
         "prep_time": 15,
         "cook_time": 25,
