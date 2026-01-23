@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar, Plus, Sparkles } from 'lucide-react';
+import { Calendar, Plus, Sparkles, Eye, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -14,21 +14,40 @@ const API = `${BACKEND_URL}/api`;
 
 const DIETARY_OPTIONS = ['Meat Eating', 'Poultry Only', 'Fish Only', 'Vegetarian', 'Vegan'];
 const COOKING_METHODS = ['Air Fryer', 'Microwave', 'Stovetop', 'Toaster', 'Instant Pot'];
+const HEALTH_GOALS = [
+  { value: 'lose_weight', label: 'Lose Weight' },
+  { value: 'gain_weight', label: 'Gain Weight' },
+  { value: 'gain_muscle', label: 'Gain Muscle' },
+  { value: 'eat_healthy', label: 'Eat Healthy' },
+  { value: 'increase_energy', label: 'Increase Energy' },
+  { value: 'improve_digestion', label: 'Improve Digestion' }
+];
 
 function MealPlanner({ user }) {
   const [mealPlans, setMealPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(null);
   
-  const [planType, setPlanType] = useState('weekly');
-  const [selectedDietary, setSelectedDietary] = useState([]);
-  const [selectedCooking, setSelectedCooking] = useState([]);
+  const [goal, setGoal] = useState(user?.health_goal || '');
+  const [selectedDietary, setSelectedDietary] = useState(user?.dietary_preferences || []);
+  const [selectedCooking, setSelectedCooking] = useState(user?.cooking_methods || []);
   const [useAI, setUseAI] = useState(false);
 
   useEffect(() => {
     fetchMealPlans();
   }, []);
+
+  useEffect(() => {
+    // Auto-populate from user profile
+    if (user) {
+      setSelectedDietary(user.dietary_preferences || []);
+      setSelectedCooking(user.cooking_methods || []);
+      setGoal(user.health_goal || '');
+    }
+  }, [user]);
 
   const fetchMealPlans = async () => {
     const token = localStorage.getItem('token');
@@ -50,7 +69,8 @@ function MealPlanner({ user }) {
     
     try {
       await axios.post(`${API}/meal-plans`, {
-        plan_type: planType,
+        plan_type: 'weekly',
+        goal: goal || null,
         dietary_preferences: selectedDietary,
         cooking_methods: selectedCooking,
         generate_with_ai: useAI
@@ -58,7 +78,7 @@ function MealPlanner({ user }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      toast.success('Meal plan created!');
+      toast.success('Weekly meal plan created!');
       setDialogOpen(false);
       fetchMealPlans();
     } catch (error) {
@@ -66,6 +86,11 @@ function MealPlanner({ user }) {
     } finally {
       setCreating(false);
     }
+  };
+
+  const viewPlan = (plan) => {
+    setSelectedPlan(plan);
+    setViewDialogOpen(true);
   };
 
   return (
@@ -83,30 +108,35 @@ function MealPlanner({ user }) {
             <DialogTrigger asChild>
               <Button className="bg-violet-600 hover:bg-violet-700" data-testid="create-meal-plan-button">
                 <Plus className="w-5 h-5 mr-2" />
-                NEW PLAN
+                NEW WEEKLY PLAN
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-zinc-950 border-zinc-800" data-testid="create-meal-plan-dialog">
+            <DialogContent className="bg-zinc-950 border-zinc-800 max-w-2xl" data-testid="create-meal-plan-dialog">
               <DialogHeader>
-                <DialogTitle className="text-2xl font-cinzel">CREATE MEAL PLAN</DialogTitle>
+                <DialogTitle className="text-2xl font-cinzel">CREATE WEEKLY MEAL PLAN</DialogTitle>
               </DialogHeader>
               
-              <div className="space-y-6 mt-4">
+              <div className="space-y-6 mt-4 max-h-[70vh] overflow-y-auto pr-2">
                 <div>
-                  <label className="text-zinc-300 mb-2 block">Plan Type</label>
-                  <Select value={planType} onValueChange={setPlanType}>
-                    <SelectTrigger className="bg-zinc-900 border-zinc-800" data-testid="plan-type-select">
-                      <SelectValue />
+                  <label className="text-zinc-300 mb-2 block flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Health Goal
+                  </label>
+                  <Select value={goal} onValueChange={setGoal}>
+                    <SelectTrigger className="bg-zinc-900 border-zinc-800" data-testid="goal-select">
+                      <SelectValue placeholder="Select your goal" />
                     </SelectTrigger>
                     <SelectContent className="bg-zinc-900 border-zinc-800">
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
+                      {HEALTH_GOALS.map((g) => (
+                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-zinc-500 mt-1">AI will optimize meals for your goal</p>
                 </div>
 
                 <div>
-                  <label className="text-zinc-300 mb-2 block">Dietary Preferences</label>
+                  <label className="text-zinc-300 mb-2 block">Dietary Preferences {selectedDietary.length > 0 && <span className="text-xs text-violet-400">(from profile)</span>}</label>
                   <div className="space-y-2">
                     {DIETARY_OPTIONS.map((option) => (
                       <div key={option} className="flex items-center space-x-2">
@@ -129,7 +159,7 @@ function MealPlanner({ user }) {
                 </div>
 
                 <div>
-                  <label className="text-zinc-300 mb-2 block">Cooking Methods</label>
+                  <label className="text-zinc-300 mb-2 block">Cooking Methods {selectedCooking.length > 0 && <span className="text-xs text-violet-400">(from profile)</span>}</label>
                   <div className="space-y-2">
                     {COOKING_METHODS.map((method) => (
                       <div key={method} className="flex items-center space-x-2">
@@ -151,14 +181,14 @@ function MealPlanner({ user }) {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 p-4 bg-gradient-to-r from-violet-600/10 to-pink-600/10 border border-violet-500/30">
                   <Checkbox
                     id="useAI"
                     checked={useAI}
                     onCheckedChange={setUseAI}
                     data-testid="use-ai-checkbox"
                   />
-                  <label htmlFor="useAI" className="text-zinc-400 cursor-pointer flex items-center gap-2">
+                  <label htmlFor="useAI" className="text-zinc-300 cursor-pointer flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-violet-500" />
                     Generate with AI (requires API key in Profile)
                   </label>
@@ -170,7 +200,7 @@ function MealPlanner({ user }) {
                   className="w-full bg-violet-600 hover:bg-violet-700"
                   data-testid="submit-meal-plan-button"
                 >
-                  {creating ? 'CREATING...' : 'CREATE PLAN'}
+                  {creating ? 'CREATING...' : 'CREATE WEEKLY PLAN'}
                 </Button>
               </div>
             </DialogContent>
@@ -187,7 +217,7 @@ function MealPlanner({ user }) {
           >
             <Calendar className="w-20 h-20 text-zinc-700 mx-auto mb-6" />
             <h2 className="text-2xl font-cinzel font-bold text-zinc-400 mb-2">NO MEAL PLANS YET</h2>
-            <p className="text-zinc-500 mb-6">Create your first meal plan to start conquering your nutrition</p>
+            <p className="text-zinc-500 mb-6">Create your first weekly meal plan to start conquering your nutrition</p>
           </motion.div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -202,14 +232,20 @@ function MealPlanner({ user }) {
               >
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xl font-cinzel font-semibold">
-                    {plan.plan_type.charAt(0).toUpperCase() + plan.plan_type.slice(1)} Plan
+                    Weekly Plan
                   </h3>
                   <span className="text-sm text-zinc-500">
                     {new Date(plan.created_at).toLocaleDateString()}
                   </span>
                 </div>
                 
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 text-sm mb-4">
+                  {plan.goal && (
+                    <p className="text-zinc-400">
+                      <strong className="text-violet-400">Goal:</strong>{' '}
+                      {HEALTH_GOALS.find(g => g.value === plan.goal)?.label || plan.goal}
+                    </p>
+                  )}
                   <p className="text-zinc-400">
                     <strong className="text-zinc-300">Dietary:</strong>{' '}
                     {plan.dietary_preferences.join(', ') || 'None'}
@@ -223,19 +259,68 @@ function MealPlanner({ user }) {
                   </p>
                 </div>
 
-                <div className="mt-4 flex gap-2">
-                  <Button variant="outline" className="flex-1 border-zinc-700 hover:border-violet-500" size="sm">
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => viewPlan(plan)}
+                    className="flex-1 bg-violet-600 hover:bg-violet-700" 
+                    size="sm"
+                    data-testid={`view-plan-${plan.id}`}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
                     View Plan
-                  </Button>
-                  <Button variant="outline" className="flex-1 border-zinc-700 hover:border-neon-pink" size="sm">
-                    Edit
                   </Button>
                 </div>
               </motion.div>
-            ))}
-          </div>
+            ))}</div>
         )}
       </div>
+
+      {/* View Plan Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl" data-testid="view-plan-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-cinzel">WEEKLY MEAL PLAN</DialogTitle>
+          </DialogHeader>
+          
+          {selectedPlan && (
+            <div className="mt-4 max-h-[70vh] overflow-y-auto pr-2">
+              {selectedPlan.goal && (
+                <div className="mb-4 p-4 bg-violet-600/20 border border-violet-500/30">
+                  <p className="text-violet-300 font-semibold">
+                    Goal: {HEALTH_GOALS.find(g => g.value === selectedPlan.goal)?.label || selectedPlan.goal}
+                  </p>
+                </div>
+              )}
+              
+              <div className="space-y-4">
+                {selectedPlan.days.map((day, idx) => (
+                  <div key={idx} className="bg-zinc-900/50 border border-zinc-800 p-4">
+                    <h3 className="text-lg font-cinzel font-semibold mb-3 text-violet-400">{day.day}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-zinc-500 font-semibold">Breakfast:</p>
+                        <p className="text-zinc-300">{day.meals.breakfast || 'Not assigned'}</p>
+                      </div>
+                      <div>
+                        <p className="text-zinc-500 font-semibold">Lunch:</p>
+                        <p className="text-zinc-300">{day.meals.lunch || 'Not assigned'}</p>
+                      </div>
+                      <div>
+                        <p className="text-zinc-500 font-semibold">Dinner:</p>
+                        <p className="text-zinc-300">{day.meals.dinner || 'Not assigned'}</p>
+                      </div>
+                      <div>
+                        <p className="text-zinc-500 font-semibold">Snack:</p>
+                        <p className="text-zinc-300">{day.meals.snack || 'Not assigned'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
