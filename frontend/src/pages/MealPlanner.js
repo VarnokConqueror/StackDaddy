@@ -255,8 +255,39 @@ function MealPlanner({ user }) {
                 </div>
 
                 <div>
+                  <label className="text-zinc-300 mb-2 block">Servings (How many people?)</label>
+                  <Select value={servings.toString()} onValueChange={(v) => setServings(parseInt(v))}>
+                    <SelectTrigger className="bg-zinc-900 border-zinc-800" data-testid="servings-select">
+                      <SelectValue placeholder="Select servings" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800">
+                      {[1, 2, 3, 4, 5, 6].map((num) => (
+                        <SelectItem key={num} value={num.toString()}>
+                          {num} {num === 1 ? 'person' : 'people'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-zinc-500 mt-1">Ingredient quantities will be adjusted</p>
+                </div>
+
+                <div className="flex items-center space-x-2 p-3 bg-green-600/10 border border-green-500/30 rounded">
+                  <Checkbox
+                    id="useLeftovers"
+                    checked={useLeftovers}
+                    onCheckedChange={setUseLeftovers}
+                    className="border-green-500/50 data-[state=checked]:bg-green-600"
+                    data-testid="use-leftovers-checkbox"
+                  />
+                  <label htmlFor="useLeftovers" className="text-zinc-300 cursor-pointer">
+                    <span className="font-semibold text-green-400">Use Leftovers</span>
+                    <p className="text-xs text-zinc-500">Dinner → Next day's lunch (saves ingredients!)</p>
+                  </label>
+                </div>
+
+                <div>
                   <label className="text-zinc-300 mb-2 block">Dietary Preferences {selectedDietary.length > 0 && <span className="text-xs text-violet-400">(from profile)</span>}</label>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {DIETARY_OPTIONS.map((option) => (
                       <div key={option} className="flex items-center space-x-2">
                         <Checkbox
@@ -271,15 +302,15 @@ function MealPlanner({ user }) {
                           }}
                           data-testid={`dietary-${option.toLowerCase().replace(' ', '-')}`}
                         />
-                        <label htmlFor={option} className="text-zinc-400 cursor-pointer">{option}</label>
+                        <label htmlFor={option} className="text-zinc-400 cursor-pointer text-sm">{option}</label>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-zinc-300 mb-2 block">Cooking Methods {selectedCooking.length > 0 && <span className="text-xs text-violet-400">(from profile)</span>}</label>
-                  <div className="space-y-2">
+                  <label className="text-zinc-300 mb-2 block">Cooking Methods</label>
+                  <div className="grid grid-cols-2 gap-2">
                     {COOKING_METHODS.map((method) => (
                       <div key={method} className="flex items-center space-x-2">
                         <Checkbox
@@ -294,7 +325,7 @@ function MealPlanner({ user }) {
                           }}
                           data-testid={`cooking-${method.toLowerCase().replace(' ', '-')}`}
                         />
-                        <label htmlFor={method} className="text-zinc-400 cursor-pointer">{method}</label>
+                        <label htmlFor={method} className="text-zinc-400 cursor-pointer text-sm">{method}</label>
                       </div>
                     ))}
                   </div>
