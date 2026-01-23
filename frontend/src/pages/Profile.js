@@ -206,8 +206,7 @@ function Profile({ user, setUser }) {
             <Settings className="w-5 h-5 text-violet-500" />
             DIETARY PREFERENCES
           </h2>
-          <div className="space-y-2 mb-4">
-            {DIETARY_OPTIONS.map((option) => (
+          <div className="space-y-2 mb-4">{DIETARY_OPTIONS.map((option) => (
               <div key={option} className="flex items-center space-x-2">
                 <Checkbox
                   id={`pref-${option}`}
