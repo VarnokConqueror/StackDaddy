@@ -25,11 +25,15 @@ const HEALTH_GOALS = [
   { value: 'improve_digestion', label: 'Improve Digestion' }
 ];
 
+const COMMON_ALLERGIES = ['Peanuts', 'Tree Nuts', 'Milk', 'Eggs', 'Wheat', 'Soy', 'Fish', 'Shellfish', 'Sesame'];
+
 function Profile({ user, setUser }) {
   const [aiConfig, setAiConfig] = useState(null);
   const [dietary, setDietary] = useState([]);
   const [cooking, setCooking] = useState([]);
   const [healthGoal, setHealthGoal] = useState('');
+  const [allergies, setAllergies] = useState([]);
+  const [customAllergy, setCustomAllergy] = useState('');
   const [pictureUrl, setPictureUrl] = useState('');
   const [aiProvider, setAiProvider] = useState('openai');
   const [aiModel, setAiModel] = useState('gpt-5.2');
@@ -42,6 +46,7 @@ function Profile({ user, setUser }) {
       setDietary(user.dietary_preferences || []);
       setCooking(user.cooking_methods || []);
       setHealthGoal(user.health_goal || '');
+      setAllergies(user.allergies || []);
       setPictureUrl(user.picture_url || '');
     }
   }, [user]);
