@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Crown, LayoutDashboard, Utensils, ShoppingCart, Package, Pill, Heart, User, LogOut } from 'lucide-react';
+import { Crown, LayoutDashboard, Utensils, ShoppingCart, Package, Pill, User, LogOut, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 function Navigation({ user }) {
@@ -51,7 +51,7 @@ function Navigation({ user }) {
               data-testid="nav-shopping-list"
             >
               <ShoppingCart className="w-4 h-4" />
-              <span>Shopping</span>
+              <span>Provisions</span>
             </Link>
             <Link
               to="/pantry"
@@ -71,7 +71,7 @@ function Navigation({ user }) {
               data-testid="nav-supplements"
             >
               <Pill className="w-4 h-4" />
-              <span>Supps</span>
+              <span>Elixirs</span>
             </Link>
             <Link
               to="/profile"
@@ -83,6 +83,18 @@ function Navigation({ user }) {
               <User className="w-4 h-4" />
               <span>Profile</span>
             </Link>
+            {user?.role === 'admin' && (
+              <Link
+                to="/admin"
+                className={`flex items-center gap-1.5 px-2 py-2 transition-colors text-sm ${
+                  isActive('/admin') ? 'text-amber-400' : 'text-amber-500/70 hover:text-amber-400'
+                }`}
+                data-testid="nav-admin"
+              >
+                <Shield className="w-4 h-4" />
+                <span>Throne</span>
+              </Link>
+            )}
             <Button
               onClick={handleLogout}
               variant="ghost"
