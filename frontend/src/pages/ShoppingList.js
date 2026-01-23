@@ -402,12 +402,12 @@ function ShoppingList({ user }) {
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl font-cinzel text-red-400">
-              DELETE SHOPPING LIST?
+              BURN THIS SCROLL?
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
-            <p className="text-zinc-400 mb-6">
-              This will permanently remove this shopping list. This cannot be undone.
+            <p className="text-zinc-400 mb-6 italic">
+              This provision list shall be cast into the flames, never to return. This decree cannot be undone.
             </p>
             <div className="flex gap-3">
               <Button
@@ -415,14 +415,14 @@ function ShoppingList({ user }) {
                 variant="outline"
                 className="flex-1 border-zinc-700 hover:bg-zinc-800"
               >
-                CANCEL
+                SPARE IT
               </Button>
               <Button
                 onClick={deleteList}
                 className="flex-1 bg-red-600 hover:bg-red-700"
                 data-testid="confirm-delete-list-btn"
               >
-                DELETE
+                BURN IT
               </Button>
             </div>
           </div>
