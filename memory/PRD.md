@@ -19,6 +19,9 @@ Build a subscription-based application that provides weekly meal plans with corr
 - [x] "View Royal Recipe" popup with ingredients and cooking instructions
 - [x] Health goal integration (lose weight, gain muscle, etc.)
 - [x] Delete meal plans with themed confirmation dialog ("Banish from realm")
+- [x] **Servings selector** - Choose 1-6 people, adjusts ingredient quantities
+- [x] **Leftover meals** - Dinner → next day's lunch to minimize ingredients
+- [x] **Meal timestamps** - Default times for breakfast, lunch, dinner, snack
 
 ### 2. Shopping List
 - [x] Generate shopping list from meal plan recipes
