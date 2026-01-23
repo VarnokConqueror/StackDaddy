@@ -334,8 +334,8 @@ function ShoppingList({ user }) {
                       >
                         <div className="px-6 pb-6 border-t border-zinc-800">
                           {list.items.length === 0 ? (
-                            <p className="text-zinc-500 text-center py-8">
-                              No ingredients found. Make sure your meal plan has AI-generated recipes!
+                            <p className="text-zinc-500 text-center py-8 italic">
+                              This scroll is empty. Ensure your meal plan bears AI-blessed recipes!
                             </p>
                           ) : (
                             <div className="space-y-6 pt-6">
