@@ -1319,20 +1319,28 @@ def parse_ingredient_string(ingredient_str: str) -> dict:
     }
 
 @api_router.post("/shopping-lists", response_model=ShoppingList)
-async def generate_shopping_list(meal_plan_id: str, authorization: str = Header(None)):
+async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
     plan = await db.meal_plans.find_one({"id": meal_plan_id, "user_id": user["id"]}, {"_id": 0})
     if not plan:
         raise HTTPException(status_code=404, detail="Meal plan not found")
     
+    # Get servings multiplier
+    servings = plan.get("servings", 1)
+    
     all_ingredients = {}
     
     # Extract ingredients from meal plan recipes
     for day in plan.get("days", []):
         recipes = day.get("recipes", {})
+        is_leftover = day.get("is_leftover", {})
         
         for meal_type in ["breakfast", "lunch", "dinner", "snack"]:
+            # Skip leftover meals - they don't need new ingredients
+            if is_leftover.get(meal_type, False):
+                continue
+                
             recipe = recipes.get(meal_type, {})
             ingredients_list = recipe.get("ingredients", [])
             
