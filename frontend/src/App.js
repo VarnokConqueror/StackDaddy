@@ -66,7 +66,7 @@ function App() {
         <Route path="/supplements" element={<ProtectedRoute><SupplementLibrary user={user} /></ProtectedRoute>} />
         <Route path="/my-supplements" element={<ProtectedRoute><MySupplements user={user} /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile user={user} setUser={setUser} /></ProtectedRoute>} />
-        <Route path="/subscription" element={<ProtectedRoute><Subscription user={user} /></ProtectedRoute>} />
+        <Route path="/subscription" element={<ProtectedRoute><Subscription user={user} setUser={setUser} /></ProtectedRoute>} />
         <Route path="/subscription/success" element={<ProtectedRoute><SubscriptionSuccess user={user} setUser={setUser} /></ProtectedRoute>} />
       </Routes>
     );
