@@ -16,6 +16,14 @@ const API = `${BACKEND_URL}/api`;
 
 const DIETARY_OPTIONS = ['Meat Eating', 'Poultry Only', 'Fish Only', 'Vegetarian', 'Vegan'];
 const COOKING_METHODS = ['Air Fryer', 'Microwave', 'Stovetop', 'Toaster', 'Instant Pot'];
+const HEALTH_GOALS = [
+  { value: 'lose_weight', label: 'Lose Weight' },
+  { value: 'gain_weight', label: 'Gain Weight' },
+  { value: 'gain_muscle', label: 'Gain Muscle' },
+  { value: 'eat_healthy', label: 'Eat Healthy' },
+  { value: 'increase_energy', label: 'Increase Energy' },
+  { value: 'improve_digestion', label: 'Improve Digestion' }
+];
 
 function Profile({ user, setUser }) {
   const [aiConfig, setAiConfig] = useState(null);
