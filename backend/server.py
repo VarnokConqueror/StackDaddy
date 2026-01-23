@@ -98,6 +98,8 @@ class MealPlanCreate(BaseModel):
     dietary_preferences: List[str] = []
     cooking_methods: List[str] = []
     generate_with_ai: bool = False
+    servings: int = 1  # Number of people/servings
+    use_leftovers: bool = True  # Use dinner leftovers for next day lunch
 
 class RecipeDetail(BaseModel):
     ingredients: List[str] = []
