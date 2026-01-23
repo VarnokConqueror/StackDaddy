@@ -91,7 +91,7 @@ function Profile({ user, setUser }) {
 
   const updateProfilePicture = async () => {
     if (!pictureUrl) {
-      toast.error('Please enter a picture URL');
+      toast.error('Please select a picture');
       return;
     }
 
@@ -116,6 +116,30 @@ function Profile({ user, setUser }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image must be less than 2MB');
+      return;
+    }
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPictureUrl(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const saveAiConfig = async () => {
