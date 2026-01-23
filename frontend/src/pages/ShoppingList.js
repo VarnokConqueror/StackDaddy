@@ -281,10 +281,10 @@ function ShoppingList({ user }) {
                         <div>
                           <h3 className="text-xl font-cinzel font-semibold flex items-center gap-2">
                             <ShoppingCart className="w-5 h-5 text-violet-500" />
-                            Shopping List
+                            Provision Scroll
                           </h3>
-                          <p className="text-sm text-zinc-500 mt-1">
-                            Created {new Date(list.created_at).toLocaleDateString()} • {list.items.length} Items
+                          <p className="text-sm text-zinc-500 mt-1 italic">
+                            Inscribed {new Date(list.created_at).toLocaleDateString()} • {list.items.length} Sacred Items
                           </p>
                         </div>
                       </div>
