@@ -32,7 +32,11 @@ function MealPlanner({ user }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [planToDelete, setPlanToDelete] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [editingDay, setEditingDay] = useState(null);
   const [editingMealType, setEditingMealType] = useState(null);
   const [mealInput, setMealInput] = useState('');
