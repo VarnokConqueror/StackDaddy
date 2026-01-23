@@ -3,9 +3,11 @@ import axios from 'axios';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar, Plus, Sparkles, Eye, Target } from 'lucide-react';
+import { Calendar, Plus, Sparkles, Eye, Target, Trash2, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -29,7 +31,11 @@ function MealPlanner({ user }) {
   const [creating, setCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [editingDay, setEditingDay] = useState(null);
+  const [editingMealType, setEditingMealType] = useState(null);
+  const [mealInput, setMealInput] = useState('');
   
   const [goal, setGoal] = useState(user?.health_goal || '');
   const [selectedDietary, setSelectedDietary] = useState(user?.dietary_preferences || []);
@@ -41,7 +47,6 @@ function MealPlanner({ user }) {
   }, []);
 
   useEffect(() => {
-    // Auto-populate from user profile
     if (user) {
       setSelectedDietary(user.dietary_preferences || []);
       setSelectedCooking(user.cooking_methods || []);
@@ -78,7 +83,7 @@ function MealPlanner({ user }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      toast.success('Weekly meal plan created!');
+      toast.success('Weekly meal plan created! Click Edit to add meals.');
       setDialogOpen(false);
       fetchMealPlans();
     } catch (error) {
@@ -88,9 +93,62 @@ function MealPlanner({ user }) {
     }
   };
 
+  const deleteMealPlan = async (planId) => {
+    if (!confirm('Delete this meal plan? This cannot be undone.')) return;
+
+    const token = localStorage.getItem('token');
+    try {
+      await axios.delete(`${API}/meal-plans/${planId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Meal plan deleted');
+      fetchMealPlans();
+    } catch (error) {
+      toast.error('Failed to delete meal plan');
+    }
+  };
+
   const viewPlan = (plan) => {
     setSelectedPlan(plan);
     setViewDialogOpen(true);
+  };
+
+  const startEditingMeal = (plan, dayIndex, mealType) => {
+    setSelectedPlan(plan);
+    setEditingDay(dayIndex);
+    setEditingMealType(mealType);
+    setMealInput(plan.days[dayIndex].meals[mealType] || '');
+    setEditDialogOpen(true);
+  };
+
+  const saveMeal = async () => {
+    if (!mealInput.trim()) {
+      toast.error('Please enter a meal name');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    const updatedDays = [...selectedPlan.days];
+    updatedDays[editingDay].meals[editingMealType] = mealInput.trim();
+
+    try {
+      await axios.put(`${API}/meal-plans/${selectedPlan.id}`, {
+        days: updatedDays
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      toast.success('Meal updated!');
+      setEditDialogOpen(false);
+      fetchMealPlans();
+      
+      // Update selected plan if view dialog is open
+      if (viewDialogOpen) {
+        setSelectedPlan({ ...selectedPlan, days: updatedDays });
+      }
+    } catch (error) {
+      toast.error('Failed to update meal');
+    }
   };
 
   return (
@@ -227,10 +285,18 @@ function MealPlanner({ user }) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-6 hover:border-violet-500/30 transition-colors duration-300"
+                className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/50 p-6 hover:border-violet-500/30 transition-colors duration-300 relative"
                 data-testid={`meal-plan-${plan.id}`}
               >
-                <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => deleteMealPlan(plan.id)}
+                  className="absolute top-4 right-4 text-zinc-600 hover:text-red-400 transition-colors"
+                  data-testid={`delete-plan-${plan.id}`}
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center justify-between mb-4 pr-8">
                   <h3 className="text-xl font-cinzel font-semibold">
                     Weekly Plan
                   </h3>
@@ -254,9 +320,6 @@ function MealPlanner({ user }) {
                     <strong className="text-zinc-300">Cooking:</strong>{' '}
                     {plan.cooking_methods.join(', ') || 'None'}
                   </p>
-                  <p className="text-zinc-400">
-                    <strong className="text-zinc-300">Days:</strong> {plan.days.length}
-                  </p>
                 </div>
 
                 <div className="flex gap-2">
@@ -267,15 +330,16 @@ function MealPlanner({ user }) {
                     data-testid={`view-plan-${plan.id}`}
                   >
                     <Eye className="w-4 h-4 mr-2" />
-                    View Plan
+                    View & Edit
                   </Button>
                 </div>
               </motion.div>
-            ))}</div>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* View Plan Dialog */}
+      {/* View/Edit Plan Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl" data-testid="view-plan-dialog">
           <DialogHeader>
@@ -293,32 +357,59 @@ function MealPlanner({ user }) {
               )}
               
               <div className="space-y-4">
-                {selectedPlan.days.map((day, idx) => (
-                  <div key={idx} className="bg-zinc-900/50 border border-zinc-800 p-4">
+                {selectedPlan.days.map((day, dayIdx) => (
+                  <div key={dayIdx} className="bg-zinc-900/50 border border-zinc-800 p-4">
                     <h3 className="text-lg font-cinzel font-semibold mb-3 text-violet-400">{day.day}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-zinc-500 font-semibold">Breakfast:</p>
-                        <p className="text-zinc-300">{day.meals.breakfast || 'Not assigned'}</p>
-                      </div>
-                      <div>
-                        <p className="text-zinc-500 font-semibold">Lunch:</p>
-                        <p className="text-zinc-300">{day.meals.lunch || 'Not assigned'}</p>
-                      </div>
-                      <div>
-                        <p className="text-zinc-500 font-semibold">Dinner:</p>
-                        <p className="text-zinc-300">{day.meals.dinner || 'Not assigned'}</p>
-                      </div>
-                      <div>
-                        <p className="text-zinc-500 font-semibold">Snack:</p>
-                        <p className="text-zinc-300">{day.meals.snack || 'Not assigned'}</p>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {['breakfast', 'lunch', 'dinner', 'snack'].map((mealType) => (
+                        <div key={mealType} className="group">
+                          <p className="text-zinc-500 font-semibold capitalize mb-1">{mealType}:</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-zinc-300 flex-1">
+                              {day.meals[mealType] || <span className="text-zinc-600 italic">Click edit to add</span>}
+                            </p>
+                            <button
+                              onClick={() => startEditingMeal(selectedPlan, dayIdx, mealType)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-violet-400 hover:text-violet-300"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Meal Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-cinzel capitalize">
+              EDIT {editingMealType}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Label className="text-zinc-300 mb-2 block">Meal Name</Label>
+            <Input
+              value={mealInput}
+              onChange={(e) => setMealInput(e.target.value)}
+              placeholder="e.g., Grilled Chicken Salad"
+              className="bg-zinc-900 border-zinc-800 mb-4"
+              onKeyPress={(e) => e.key === 'Enter' && saveMeal()}
+            />
+            <Button
+              onClick={saveMeal}
+              className="w-full bg-violet-600 hover:bg-violet-700"
+            >
+              SAVE MEAL
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
