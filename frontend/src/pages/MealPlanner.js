@@ -34,12 +34,15 @@ function MealPlanner({ user }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
   const [planToDelete, setPlanToDelete] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [editingDay, setEditingDay] = useState(null);
   const [editingMealType, setEditingMealType] = useState(null);
   const [mealInput, setMealInput] = useState('');
+  const [regenerating, setRegenerating] = useState(false);
+  const [extraRestriction, setExtraRestriction] = useState('');
   
   const [goal, setGoal] = useState(user?.health_goal || '');
   const [selectedDietary, setSelectedDietary] = useState(user?.dietary_preferences || []);
