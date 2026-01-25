@@ -1,27 +1,87 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Header
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from contextlib import asynccontextmanager
 import os
 import logging
 from pathlib import Path
+
+# Version for deployment verification
+API_VERSION = "2026.01.25.v3"
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 from passlib.context import CryptContext
 import jwt
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 import requests
 import stripe
+import openai
+import sys
+import importlib
+
+def _import_local_modules():
+    if 'backend.stripe_client' in sys.modules or __name__.startswith('backend.'):
+        stripe_mod = importlib.import_module('backend.stripe_client')
+        db_mod = importlib.import_module('backend.db')
+    else:
+        stripe_mod = importlib.import_module('stripe_client')
+        db_mod = importlib.import_module('db')
+    return stripe_mod, db_mod
+
+_stripe_mod, _db_mod = _import_local_modules()
+init_stripe_client = _stripe_mod.init_stripe
+
+init_pool = _db_mod.init_pool
+close_pool = _db_mod.close_pool
+find_user_by_id = _db_mod.find_user_by_id
+find_user_by_email = _db_mod.find_user_by_email
+find_user_by_oauth = _db_mod.find_user_by_oauth
+insert_user = _db_mod.insert_user
+update_user = _db_mod.update_user
+count_supplements = _db_mod.count_supplements
+insert_supplements = _db_mod.insert_supplements
+find_all_supplements = _db_mod.find_all_supplements
+find_supplement_by_id = _db_mod.find_supplement_by_id
+insert_supplement = _db_mod.insert_supplement
+find_promo_by_code = _db_mod.find_promo_by_code
+update_promo_uses = _db_mod.update_promo_uses
+insert_promo_code = _db_mod.insert_promo_code
+find_all_promo_codes = _db_mod.find_all_promo_codes
+deactivate_promo_code = _db_mod.deactivate_promo_code
+insert_meal = _db_mod.insert_meal
+find_meals = _db_mod.find_meals
+find_meal_by_id = _db_mod.find_meal_by_id
+insert_meal_plan = _db_mod.insert_meal_plan
+find_meal_plans_by_user = _db_mod.find_meal_plans_by_user
+find_meal_plan_by_id = _db_mod.find_meal_plan_by_id
+update_meal_plan = _db_mod.update_meal_plan
+delete_meal_plan = _db_mod.delete_meal_plan
+delete_shopping_lists_by_meal_plan = _db_mod.delete_shopping_lists_by_meal_plan
+insert_shopping_list = _db_mod.insert_shopping_list
+find_shopping_lists_by_user = _db_mod.find_shopping_lists_by_user
+delete_shopping_list = _db_mod.delete_shopping_list
+find_pantry_by_user = _db_mod.find_pantry_by_user
+insert_pantry_item = _db_mod.insert_pantry_item
+find_pantry_item = _db_mod.find_pantry_item
+update_pantry_item = _db_mod.update_pantry_item
+delete_pantry_item = _db_mod.delete_pantry_item
+insert_user_supplement = _db_mod.insert_user_supplement
+find_user_supplements = _db_mod.find_user_supplements
+update_user_supplement = _db_mod.update_user_supplement
+delete_user_supplement = _db_mod.delete_user_supplement
+insert_supplement_log = _db_mod.insert_supplement_log
+find_supplement_logs = _db_mod.find_supplement_logs
+find_subscription_by_user = _db_mod.find_subscription_by_user
+insert_subscription = _db_mod.insert_subscription
+update_subscription = _db_mod.update_subscription
+insert_payment = _db_mod.insert_payment
+find_payments_by_user = _db_mod.find_payments_by_user
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
-
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -31,8 +91,41 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-this')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 720
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_pool()
+    await seed_supplements()
+    await init_stripe_client()
+    yield
+    await close_pool()
+
+app = FastAPI(lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
+
+@api_router.get("/version")
+async def get_version():
+    """Get API version for deployment verification"""
+    return {"version": API_VERSION, "google_callback_route": "enabled"}
+
+# Helper function for LLM calls using OpenAI API
+async def call_openai(api_key: str, prompt: str, system_message: str = None, model: str = "gpt-4") -> str:
+    """Call OpenAI API directly"""
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logging.error(f"OpenAI API error: {e}")
+        raise
 
 # ============== Models ==============
 
@@ -95,12 +188,12 @@ class Meal(BaseModel):
 
 class MealPlanCreate(BaseModel):
     plan_type: str = "weekly"
-    goal: Optional[str] = None  # lose_weight, gain_weight, gain_muscle, eat_healthy, etc.
+    goal: Optional[str] = None
     dietary_preferences: List[str] = []
     cooking_methods: List[str] = []
     generate_with_ai: bool = False
-    servings: int = 1  # Number of people/servings
-    use_leftovers: bool = True  # Use dinner leftovers for next day lunch
+    servings: int = 1
+    use_leftovers: bool = True
 
 class RecipeDetail(BaseModel):
     ingredients: List[str] = []
@@ -112,8 +205,8 @@ class RecipeDetail(BaseModel):
 class MealPlanDay(BaseModel):
     day: str
     meals: Dict[str, Optional[str]]
-    meal_times: Optional[Dict[str, str]] = {}  # e.g., {"breakfast": "8:00 AM", "lunch": "12:30 PM"}
-    is_leftover: Optional[Dict[str, bool]] = {}  # e.g., {"lunch": True} means lunch is leftover from prev dinner
+    meal_times: Optional[Dict[str, str]] = {}
+    is_leftover: Optional[Dict[str, bool]] = {}
     instructions: Optional[Dict[str, str]] = {}
     recipes: Optional[Dict[str, RecipeDetail]] = {}
     locked: bool = False
@@ -128,11 +221,10 @@ class MealPlan(BaseModel):
     days: List[MealPlanDay]
     dietary_preferences: List[str]
     cooking_methods: List[str]
-    servings: int = 1  # Number of people/servings
+    servings: int = 1
     created_at: str
     goal: Optional[str] = None
 
-# Pantry item for tracking user's ingredients
 class PantryItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
@@ -140,7 +232,7 @@ class PantryItem(BaseModel):
     name: str
     quantity: float
     unit: str
-    category: str  # spices, oils, grains, etc.
+    category: str
     low_stock_threshold: Optional[float] = None
     created_at: str
     updated_at: str
@@ -257,6 +349,15 @@ def create_access_token(data: dict) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
+def _normalize_user(user: dict) -> dict:
+    if user.get("dietary_preferences") is None:
+        user["dietary_preferences"] = []
+    if user.get("cooking_methods") is None:
+        user["cooking_methods"] = []
+    if user.get("allergies") is None:
+        user["allergies"] = []
+    return user
+
 async def get_current_user(authorization: str = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -268,11 +369,11 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        user = await db.users.find_one({"id": user_id}, {"_id": 0})
+        user = await find_user_by_id(user_id)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         
-        return user
+        return _normalize_user(user)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
@@ -281,7 +382,7 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
 # ============== Seed Data ==============
 
 async def seed_supplements():
-    count = await db.supplements.count_documents({})
+    count = await count_supplements()
     if count == 0:
         supplements = [
             {"id": str(uuid.uuid4()), "name": "Vitamin D3", "purpose": "Bone health, immune support", "typical_dose_min": 1000, "typical_dose_max": 5000, "dose_unit": "IU", "warnings": "High doses may cause hypercalcemia", "interactions": "May interact with certain heart medications"},
@@ -293,13 +394,13 @@ async def seed_supplements():
             {"id": str(uuid.uuid4()), "name": "Zinc", "purpose": "Immune function, wound healing", "typical_dose_min": 8, "typical_dose_max": 40, "dose_unit": "mg", "warnings": "Too much can interfere with copper absorption", "interactions": "Antibiotics, diuretics"},
             {"id": str(uuid.uuid4()), "name": "Vitamin C", "purpose": "Immune support, antioxidant", "typical_dose_min": 500, "typical_dose_max": 2000, "dose_unit": "mg", "warnings": "High doses may cause digestive upset", "interactions": "Generally safe"},
         ]
-        await db.supplements.insert_many(supplements)
+        await insert_supplements(supplements)
 
 # ============== Auth Routes ==============
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserRegister):
-    existing_user = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+    existing_user = await find_user_by_email(user_data.email)
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
@@ -316,7 +417,7 @@ async def register(user_data: UserRegister):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.users.insert_one(user_doc)
+    await insert_user(user_doc)
     
     token = create_access_token({"sub": user_id})
     user_response = UserResponse(
@@ -330,12 +431,12 @@ async def register(user_data: UserRegister):
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: UserLogin):
-    user = await db.users.find_one({"email": credentials.email}, {"_id": 0})
+    user = await find_user_by_email(credentials.email)
     if not user or not verify_password(credentials.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     token = create_access_token({"sub": user["id"]})
-    user_response = UserResponse(**user)
+    user_response = UserResponse(**_normalize_user(user))
     
     return TokenResponse(token=token, user=user_response)
 
@@ -361,10 +462,7 @@ async def update_preferences(
     if "allergies" in preferences:
         update_data["allergies"] = preferences["allergies"]
     
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": update_data}
-    )
+    await update_user(user["id"], update_data)
     
     return {"message": "Preferences updated"}
 
@@ -373,24 +471,21 @@ async def update_profile_picture(
     picture_data: Dict[str, str],
     authorization: str = Header(None)
 ):
-    """Update user profile picture URL"""
     user = await get_current_user(authorization)
     
     picture_url = picture_data.get("picture_url")
     if not picture_url:
         raise HTTPException(status_code=400, detail="picture_url required")
     
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {"picture_url": picture_url}}
-    )
+    await update_user(user["id"], {"picture_url": picture_url})
     
     return {"message": "Profile picture updated", "picture_url": picture_url}
 
 # ============== OAuth Routes ==============
 
-class OAuthSessionRequest(BaseModel):
-    session_id: str
+class OAuthCodeRequest(BaseModel):
+    code: str
+    redirect_uri: str
 
 class OAuthCallbackData(BaseModel):
     provider: str
@@ -398,35 +493,64 @@ class OAuthCallbackData(BaseModel):
     access_token: Optional[str] = None
     user_data: Optional[Dict[str, Any]] = None
 
-async def verify_emergent_google_session(session_id: str) -> Optional[Dict[str, Any]]:
-    """Verify Google OAuth session via Emergent"""
+async def exchange_google_code(code: str, redirect_uri: str) -> Optional[Dict[str, Any]]:
     try:
-        response = requests.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id},
+        client_id = os.environ.get('GOOGLE_CLIENT_ID')
+        client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+        
+        if not client_id or not client_secret:
+            logging.error("Google OAuth credentials not configured")
+            return None
+        
+        token_response = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code"
+            },
             timeout=10
         )
-        if response.status_code == 200:
-            return response.json()
-        return None
+        
+        if token_response.status_code != 200:
+            logging.error(f"Google token exchange failed: {token_response.text}")
+            return None
+        
+        tokens = token_response.json()
+        access_token = tokens.get("access_token")
+        
+        userinfo_response = requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10
+        )
+        
+        if userinfo_response.status_code != 200:
+            logging.error(f"Google userinfo request failed: {userinfo_response.text}")
+            return None
+        
+        user_info = userinfo_response.json()
+        return {
+            "id": user_info.get("id"),
+            "email": user_info.get("email"),
+            "name": user_info.get("name"),
+            "picture": user_info.get("picture"),
+            "access_token": access_token,
+            "refresh_token": tokens.get("refresh_token")
+        }
     except Exception as e:
-        logging.error(f"Emergent Google session verification failed: {e}")
+        logging.error(f"Google OAuth exchange failed: {e}")
         return None
 
 async def verify_apple_token(id_token: str) -> Optional[Dict[str, Any]]:
-    """Verify Apple ID token - Phase 2"""
-    # Placeholder for Apple Sign-In verification
-    # Will be implemented when Apple credentials are provided
     apple_team_id = os.environ.get('APPLE_TEAM_ID')
     if not apple_team_id:
         return None
-    # TODO: Implement Apple token verification with apple-signin-auth library
     return None
 
 async def verify_facebook_token(access_token: str) -> Optional[Dict[str, Any]]:
-    """Verify Facebook access token - Phase 2"""
-    # Placeholder for Facebook token verification
-    # Will be implemented when Facebook credentials are provided
     facebook_app_id = os.environ.get('FACEBOOK_APP_ID')
     facebook_app_secret = os.environ.get('FACEBOOK_APP_SECRET')
     
@@ -434,7 +558,6 @@ async def verify_facebook_token(access_token: str) -> Optional[Dict[str, Any]]:
         return None
     
     try:
-        # Verify token
         verify_response = requests.get(
             "https://graph.facebook.com/debug_token",
             params={
@@ -448,7 +571,6 @@ async def verify_facebook_token(access_token: str) -> Optional[Dict[str, Any]]:
         if not verify_data.get("data", {}).get("is_valid"):
             return None
         
-        # Get user info
         user_response = requests.get(
             "https://graph.facebook.com/me",
             params={
@@ -472,87 +594,144 @@ async def verify_facebook_token(access_token: str) -> Optional[Dict[str, Any]]:
         logging.error(f"Facebook token verification failed: {e}")
         return None
 
-@api_router.post("/auth/oauth/google")
-async def google_oauth_session(request: OAuthSessionRequest):
-    """Handle Emergent Google OAuth session exchange"""
-    session_data = await verify_emergent_google_session(request.session_id)
+@api_router.get("/auth/google-callback")
+async def google_oauth_callback_v2(code: str = None, error: str = None):
+    """Redirect handler for Google OAuth"""
+    from fastapi.responses import RedirectResponse
     
-    if not session_data:
-        raise HTTPException(status_code=401, detail="Invalid session")
+    if error:
+        return RedirectResponse(url=f"/?error={error}")
     
-    session_token = session_data.get("session_token")
-    email = session_data.get("email")
-    name = session_data.get("name")
-    picture = session_data.get("picture")
-    provider_id = session_data.get("id")
+    if not code:
+        return RedirectResponse(url="/?error=no_code")
     
-    # Check if user exists with this OAuth provider
-    existing_user = await db.users.find_one({
-        "oauth_provider": "google",
-        "oauth_id": provider_id
-    }, {"_id": 0})
+    redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI', 'https://temple.theconquerorscourt.com/api/auth/google-callback')
+    user_data = await exchange_google_code(code, redirect_uri)
+    
+    if not user_data:
+        return RedirectResponse(url="/?error=auth_failed")
+    
+    email = user_data.get("email")
+    name = user_data.get("name")
+    picture = user_data.get("picture")
+    provider_id = user_data.get("id")
+    
+    existing_user = await find_user_by_oauth("google", provider_id)
     
     if existing_user:
-        # Update session token
-        await db.user_sessions.update_one(
-            {"user_id": existing_user["id"]},
-            {
-                "$set": {
-                    "session_token": session_token,
-                    "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }
-            },
-            upsert=True
-        )
-        
-        user_response = UserResponse(**existing_user)
         token = create_access_token({"sub": existing_user["id"]})
-        
-        return {
-            "token": token,
-            "session_token": session_token,
-            "user": user_response
-        }
+        return RedirectResponse(url=f"/?token={token}")
     
-    # Check if email exists (account linking)
-    existing_email = await db.users.find_one({"email": email}, {"_id": 0})
+    existing_email = await find_user_by_email(email)
     
     if existing_email:
-        # Link OAuth to existing account
-        await db.users.update_one(
-            {"id": existing_email["id"]},
-            {
-                "$set": {
-                    "oauth_provider": "google",
-                    "oauth_id": provider_id,
-                    "picture_url": picture
-                }
-            }
-        )
-        
-        await db.user_sessions.update_one(
-            {"user_id": existing_email["id"]},
-            {
-                "$set": {
-                    "session_token": session_token,
-                    "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }
-            },
-            upsert=True
-        )
-        
-        user_response = UserResponse(**existing_email)
+        await update_user(existing_email["id"], {"oauth_provider": "google", "oauth_id": provider_id, "picture_url": picture})
         token = create_access_token({"sub": existing_email["id"]})
-        
-        return {
-            "token": token,
-            "session_token": session_token,
-            "user": user_response
-        }
+        return RedirectResponse(url=f"/?token={token}")
     
-    # Create new user
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": email,
+        "name": name,
+        "oauth_provider": "google",
+        "oauth_id": provider_id,
+        "picture_url": picture,
+        "subscription_status": "inactive",
+        "subscription_end_date": None,
+        "dietary_preferences": [],
+        "cooking_methods": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await insert_user(user_doc)
+    
+    token = create_access_token({"sub": user_id})
+    return RedirectResponse(url=f"/?token={token}")
+
+@api_router.get("/auth/google/callback")
+async def google_oauth_callback(code: str = None, error: str = None):
+    from fastapi.responses import RedirectResponse
+    
+    if error:
+        return RedirectResponse(url=f"/?error={error}")
+    
+    if not code:
+        return RedirectResponse(url="/?error=no_code")
+    
+    redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI', 'https://temple.theconquerorscourt.com/api/auth/google/callback')
+    user_data = await exchange_google_code(code, redirect_uri)
+    
+    if not user_data:
+        return RedirectResponse(url="/?error=auth_failed")
+    
+    email = user_data.get("email")
+    name = user_data.get("name")
+    picture = user_data.get("picture")
+    provider_id = user_data.get("id")
+    
+    existing_user = await find_user_by_oauth("google", provider_id)
+    
+    if existing_user:
+        token = create_access_token({"sub": existing_user["id"]})
+        return RedirectResponse(url=f"/?token={token}")
+    
+    existing_email = await find_user_by_email(email)
+    
+    if existing_email:
+        await update_user(existing_email["id"], {"oauth_provider": "google", "oauth_id": provider_id, "picture_url": picture})
+        token = create_access_token({"sub": existing_email["id"]})
+        return RedirectResponse(url=f"/?token={token}")
+    
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": email,
+        "name": name,
+        "oauth_provider": "google",
+        "oauth_id": provider_id,
+        "picture_url": picture,
+        "subscription_status": "inactive",
+        "subscription_end_date": None,
+        "dietary_preferences": [],
+        "cooking_methods": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await insert_user(user_doc)
+    
+    token = create_access_token({"sub": user_id})
+    return RedirectResponse(url=f"/?token={token}")
+
+@api_router.post("/auth/oauth/google")
+async def google_oauth_exchange(request: OAuthCodeRequest):
+    user_data = await exchange_google_code(request.code, request.redirect_uri)
+    
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Failed to authenticate with Google")
+    
+    email = user_data.get("email")
+    name = user_data.get("name")
+    picture = user_data.get("picture")
+    provider_id = user_data.get("id")
+    
+    existing_user = await find_user_by_oauth("google", provider_id)
+    
+    if existing_user:
+        user_response = UserResponse(**_normalize_user(existing_user))
+        token = create_access_token({"sub": existing_user["id"]})
+        return {"token": token, "user": user_response}
+    
+    existing_email = await find_user_by_email(email)
+    
+    if existing_email:
+        await update_user(existing_email["id"], {
+            "oauth_provider": "google",
+            "oauth_id": provider_id,
+            "picture_url": picture
+        })
+        user_response = UserResponse(**_normalize_user(existing_email))
+        token = create_access_token({"sub": existing_email["id"]})
+        return {"token": token, "user": user_response}
+    
     user_id = str(uuid.uuid4())
     user_doc = {
         "id": user_id,
@@ -568,28 +747,15 @@ async def google_oauth_session(request: OAuthSessionRequest):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.users.insert_one(user_doc)
+    await insert_user(user_doc)
     
-    # Create session
-    await db.user_sessions.insert_one({
-        "user_id": user_id,
-        "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    
-    user_response = UserResponse(**user_doc)
+    user_response = UserResponse(**_normalize_user(user_doc))
     token = create_access_token({"sub": user_id})
     
-    return {
-        "token": token,
-        "session_token": session_token,
-        "user": user_response
-    }
+    return {"token": token, "user": user_response}
 
 @api_router.post("/auth/oauth/callback")
 async def oauth_callback(callback_data: OAuthCallbackData):
-    """Unified OAuth callback handler for Apple and Facebook - Phase 2"""
     provider = callback_data.provider
     
     if provider == "apple":
@@ -611,41 +777,30 @@ async def oauth_callback(callback_data: OAuthCallbackData):
     else:
         raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
     
-    # Create or link user (similar to Google flow)
     provider_id = verified_data["provider_id"]
     email = verified_data.get("email")
     name = verified_data.get("name", "User")
     picture = verified_data.get("picture")
     
-    existing_user = await db.users.find_one({
-        "oauth_provider": provider,
-        "oauth_id": provider_id
-    }, {"_id": 0})
+    existing_user = await find_user_by_oauth(provider, provider_id)
     
     if existing_user:
-        user_response = UserResponse(**existing_user)
+        user_response = UserResponse(**_normalize_user(existing_user))
         token = create_access_token({"sub": existing_user["id"]})
         return {"token": token, "user": user_response}
     
-    # Check email for account linking
     if email:
-        existing_email = await db.users.find_one({"email": email}, {"_id": 0})
+        existing_email = await find_user_by_email(email)
         if existing_email:
-            await db.users.update_one(
-                {"id": existing_email["id"]},
-                {
-                    "$set": {
-                        "oauth_provider": provider,
-                        "oauth_id": provider_id,
-                        "picture_url": picture
-                    }
-                }
-            )
-            user_response = UserResponse(**existing_email)
+            await update_user(existing_email["id"], {
+                "oauth_provider": provider,
+                "oauth_id": provider_id,
+                "picture_url": picture
+            })
+            user_response = UserResponse(**_normalize_user(existing_email))
             token = create_access_token({"sub": existing_email["id"]})
             return {"token": token, "user": user_response}
     
-    # Create new user
     user_id = str(uuid.uuid4())
     user_doc = {
         "id": user_id,
@@ -661,18 +816,19 @@ async def oauth_callback(callback_data: OAuthCallbackData):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.users.insert_one(user_doc)
+    await insert_user(user_doc)
     
-    user_response = UserResponse(**user_doc)
+    user_response = UserResponse(**_normalize_user(user_doc))
     token = create_access_token({"sub": user_id})
     
     return {"token": token, "user": user_response}
 
 @api_router.get("/auth/oauth/status")
 async def get_oauth_status():
-    """Check which OAuth providers are configured"""
+    google_client_id = os.environ.get('GOOGLE_CLIENT_ID')
     return {
-        "google": True,  # Always available via Emergent
+        "google": bool(google_client_id),
+        "google_client_id": google_client_id,
         "apple": bool(os.environ.get('APPLE_TEAM_ID')),
         "facebook": bool(os.environ.get('FACEBOOK_APP_ID') and os.environ.get('FACEBOOK_APP_SECRET'))
     }
@@ -684,11 +840,9 @@ class PromoCodeRedeem(BaseModel):
 
 @api_router.post("/promo/redeem")
 async def redeem_promo_code(promo_data: PromoCodeRedeem, authorization: str = Header(None)):
-    """Redeem a promo code for lifetime premium access"""
     user = await get_current_user(authorization)
     
-    # Check if promo code exists and is valid
-    promo = await db.promo_codes.find_one({"code": promo_data.code.upper()}, {"_id": 0})
+    promo = await find_promo_by_code(promo_data.code.upper())
     
     if not promo:
         raise HTTPException(status_code=404, detail="Invalid promo code")
@@ -696,35 +850,18 @@ async def redeem_promo_code(promo_data: PromoCodeRedeem, authorization: str = He
     if not promo.get("active", True):
         raise HTTPException(status_code=400, detail="Promo code has been deactivated")
     
-    # Check if already used by this user
-    if user["id"] in promo.get("used_by", []):
-        raise HTTPException(status_code=400, detail="You've already used this promo code")
-    
-    # Check usage limit
     max_uses = promo.get("max_uses", 0)
-    current_uses = len(promo.get("used_by", []))
+    current_uses = promo.get("uses", 0)
     if max_uses > 0 and current_uses >= max_uses:
         raise HTTPException(status_code=400, detail="Promo code has reached maximum uses")
     
-    # Grant lifetime premium
     lifetime_end = datetime(2099, 12, 31, tzinfo=timezone.utc).isoformat()
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {
-            "subscription_status": "active",
-            "subscription_end_date": lifetime_end,
-            "promo_code_used": promo_data.code.upper()
-        }}
-    )
+    await update_user(user["id"], {
+        "subscription_status": "active",
+        "subscription_end_date": lifetime_end
+    })
     
-    # Mark promo code as used
-    await db.promo_codes.update_one(
-        {"code": promo_data.code.upper()},
-        {
-            "$push": {"used_by": user["id"]},
-            "$inc": {"use_count": 1}
-        }
-    )
+    await update_promo_uses(promo_data.code.upper(), user["id"])
     
     return {
         "message": "Promo code redeemed! You now have lifetime premium access.",
@@ -738,29 +875,25 @@ async def create_promo_code(
     max_uses: int = 0,
     authorization: str = Header(None)
 ):
-    """Create a new promo code (admin only)"""
     user = await get_current_user(authorization)
     
-    # Check if user is admin
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Check if code already exists
-    existing = await db.promo_codes.find_one({"code": code.upper()}, {"_id": 0})
+    existing = await find_promo_by_code(code.upper())
     if existing:
         raise HTTPException(status_code=400, detail="Promo code already exists")
     
     promo_doc = {
+        "id": str(uuid.uuid4()),
         "code": code.upper(),
-        "max_uses": max_uses,  # 0 = unlimited
-        "use_count": 0,
-        "used_by": [],
+        "max_uses": max_uses,
+        "uses": 0,
         "active": True,
-        "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.promo_codes.insert_one(promo_doc)
+    await insert_promo_code(promo_doc)
     
     return {
         "message": "Promo code created successfully",
@@ -770,29 +903,24 @@ async def create_promo_code(
 
 @api_router.get("/admin/promo/list")
 async def list_promo_codes(authorization: str = Header(None)):
-    """List all promo codes (admin only)"""
     user = await get_current_user(authorization)
     
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    promos = await db.promo_codes.find({}, {"_id": 0}).to_list(1000)
+    promos = await find_all_promo_codes()
     return promos
 
 @api_router.delete("/admin/promo/{code}")
 async def revoke_promo_code(code: str, authorization: str = Header(None)):
-    """Revoke/delete a promo code (admin only)"""
     user = await get_current_user(authorization)
     
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    result = await db.promo_codes.update_one(
-        {"code": code.upper()},
-        {"$set": {"active": False}}
-    )
+    result = await deactivate_promo_code(code.upper())
     
-    if result.matched_count == 0:
+    if result == 0:
         raise HTTPException(status_code=404, detail="Promo code not found")
     
     return {"message": "Promo code revoked"}
@@ -802,16 +930,17 @@ async def revoke_promo_code(code: str, authorization: str = Header(None)):
 
 @api_router.post("/meals", response_model=Meal)
 async def create_meal(meal_data: MealCreate, authorization: str = Header(None)):
-    await get_current_user(authorization)
+    user = await get_current_user(authorization)
     
     meal_id = str(uuid.uuid4())
     meal_doc = {
         "id": meal_id,
+        "user_id": user["id"],
         **meal_data.model_dump(),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.meals.insert_one(meal_doc)
+    await insert_meal(meal_doc)
     return Meal(**meal_doc)
 
 @api_router.get("/meals", response_model=List[Meal])
@@ -822,21 +951,15 @@ async def get_meals(
 ):
     await get_current_user(authorization)
     
-    query = {}
-    if cooking_method:
-        query["cooking_method"] = cooking_method
-    if tags:
-        tag_list = tags.split(",")
-        query["tags"] = {"$in": tag_list}
-    
-    meals = await db.meals.find(query, {"_id": 0}).to_list(1000)
+    tag_list = tags.split(",") if tags else None
+    meals = await find_meals(cooking_method, tag_list)
     return [Meal(**meal) for meal in meals]
 
 @api_router.get("/meals/{meal_id}", response_model=Meal)
 async def get_meal(meal_id: str, authorization: str = Header(None)):
     await get_current_user(authorization)
     
-    meal = await db.meals.find_one({"id": meal_id}, {"_id": 0})
+    meal = await find_meal_by_id(meal_id)
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
     
@@ -844,7 +967,6 @@ async def get_meal(meal_id: str, authorization: str = Header(None)):
 
 # ============== Meal Plan Routes ==============
 
-# Default meal times
 DEFAULT_MEAL_TIMES = {
     "breakfast": "8:00 AM",
     "lunch": "12:30 PM", 
@@ -859,7 +981,6 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
     plan_id = str(uuid.uuid4())
     start_date = datetime.now(timezone.utc)
     
-    # ALWAYS weekly, removed monthly option
     end_date = start_date + timedelta(days=7)
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     
@@ -870,30 +991,26 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
             "meal_times": DEFAULT_MEAL_TIMES.copy(),
             "is_leftover": {"breakfast": False, "lunch": False, "dinner": False, "snack": False},
             "instructions": {}, 
-            "recipes": {}, 
+            "recipes": {},
             "locked": False
         }
         for day in days
     ]
     
-    # Use profile preferences if not provided
-    dietary_prefs = plan_data.dietary_preferences if plan_data.dietary_preferences else user.get("dietary_preferences", [])
-    cooking_methods = plan_data.cooking_methods if plan_data.cooking_methods else user.get("cooking_methods", [])
-    goal = plan_data.goal if plan_data.goal else user.get("health_goal")
+    dietary_prefs = plan_data.dietary_preferences or user.get("dietary_preferences", [])
+    cooking_methods = plan_data.cooking_methods or user.get("cooking_methods", [])
+    goal = plan_data.goal or user.get("health_goal")
     servings = plan_data.servings
     use_leftovers = plan_data.use_leftovers
     
     ai_suggestions_raw = None
     
     if plan_data.generate_with_ai:
-        ai_config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
+        ai_config = await find_ai_config(user["id"])
         if ai_config and ai_config.get("api_key"):
             try:
-                chat = LlmChat(
-                    api_key=ai_config["api_key"],
-                    session_id=f"meal_plan_{plan_id}",
-                    system_message="You are a professional nutritionist and meal planning expert. Generate practical, healthy meal suggestions with cooking instructions."
-                ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
+                system_message = "You are an expert nutritionist and meal planner. Create detailed, practical meal plans."
+                model = ai_config.get("model", "gpt-5.2")
                 
                 goal_context = ""
                 if goal:
@@ -907,13 +1024,11 @@ async def create_meal_plan(plan_data: MealPlanCreate, authorization: str = Heade
                     }
                     goal_context = f"Goal: {goal_map.get(goal, 'balanced nutrition')}\n"
                 
-                # Get user allergies if they exist
                 allergies = user.get("allergies", [])
                 allergy_context = ""
                 if allergies:
                     allergy_context = f"ALLERGIES/RESTRICTIONS: Avoid {', '.join(allergies)}\n"
                 
-                # Leftover instructions
                 leftover_context = ""
                 if use_leftovers:
                     leftover_context = """IMPORTANT - LEFTOVER STRATEGY:
@@ -979,16 +1094,13 @@ Respond ONLY with valid JSON in this exact format:
   ]
 }}"""
                 
-                response = await chat.send_message(UserMessage(text=prompt))
+                response = await call_openai(ai_config["api_key"], prompt, system_message, model)
                 ai_suggestions_raw = response
                 
-                # Parse AI response and populate meals
                 try:
                     import json
-                    # Extract JSON from response
                     response_text = response if isinstance(response, str) else str(response)
                     
-                    # Try to find JSON in the response
                     start_idx = response_text.find('{')
                     end_idx = response_text.rfind('}') + 1
                     
@@ -996,7 +1108,6 @@ Respond ONLY with valid JSON in this exact format:
                         json_str = response_text[start_idx:end_idx]
                         ai_data = json.loads(json_str)
                         
-                        # Populate meal plan with AI suggestions
                         if "days" in ai_data:
                             for i, ai_day in enumerate(ai_data["days"]):
                                 if i < len(plan_days):
@@ -1005,7 +1116,6 @@ Respond ONLY with valid JSON in this exact format:
                                     plan_days[i]["meals"]["dinner"] = ai_day.get("dinner", "")
                                     plan_days[i]["meals"]["snack"] = ai_day.get("snack", "")
                                     
-                                    # Check if lunch is leftover
                                     is_leftover = ai_day.get("lunch_is_leftover", False)
                                     plan_days[i]["is_leftover"] = {
                                         "breakfast": False,
@@ -1014,7 +1124,6 @@ Respond ONLY with valid JSON in this exact format:
                                         "snack": False
                                     }
                                     
-                                    # Add detailed recipes
                                     plan_days[i]["recipes"] = {}
                                     plan_days[i]["instructions"] = {}
                                     
@@ -1029,13 +1138,11 @@ Respond ONLY with valid JSON in this exact format:
                                                 "cook_time": recipe.get("cook_time"),
                                                 "servings": recipe.get("servings")
                                             }
-                                            # Also store short instruction reference
                                             plan_days[i]["instructions"][meal_type] = f"Prep: {recipe.get('prep_time', '?')} min | Cook: {recipe.get('cook_time', '?')} min"
                                     
                                     plan_days[i]["instructions"]["snack"] = ""
                 except Exception as parse_error:
                     logging.error(f"Failed to parse AI response: {parse_error}")
-                    # Continue with empty meals
                     
             except Exception as e:
                 logging.error(f"AI generation error: {e}")
@@ -1051,57 +1158,51 @@ Respond ONLY with valid JSON in this exact format:
         "dietary_preferences": dietary_prefs,
         "cooking_methods": cooking_methods,
         "servings": servings,
-        "ai_suggestions": ai_suggestions_raw,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.meal_plans.insert_one(plan_doc)
+    await insert_meal_plan(plan_doc)
     return MealPlan(**plan_doc)
 
 @api_router.get("/meal-plans", response_model=List[MealPlan])
 async def get_meal_plans(authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    plans = await db.meal_plans.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    plans = await find_meal_plans_by_user(user["id"])
     return [MealPlan(**plan) for plan in plans]
 
 @api_router.get("/meal-plans/{plan_id}", response_model=MealPlan)
 async def get_meal_plan(plan_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    plan = await db.meal_plans.find_one({"id": plan_id, "user_id": user["id"]}, {"_id": 0})
+    plan = await find_meal_plan_by_id(plan_id, user["id"])
     if not plan:
         raise HTTPException(status_code=404, detail="Meal plan not found")
     
     return MealPlan(**plan)
 
 @api_router.delete("/meal-plans/{plan_id}")
-async def delete_meal_plan(plan_id: str, authorization: str = Header(None)):
+async def delete_meal_plan_route(plan_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    result = await db.meal_plans.delete_one({"id": plan_id, "user_id": user["id"]})
+    result = await delete_meal_plan(plan_id, user["id"])
     
-    if result.deleted_count == 0:
+    if result == 0:
         raise HTTPException(status_code=404, detail="Meal plan not found")
     
-    # Also delete associated shopping lists
-    await db.shopping_lists.delete_many({"meal_plan_id": plan_id})
+    await delete_shopping_lists_by_meal_plan(plan_id)
     
     return {"message": "Meal plan deleted"}
 
 @api_router.put("/meal-plans/{plan_id}")
-async def update_meal_plan(
+async def update_meal_plan_route(
     plan_id: str,
     updates: Dict[str, Any],
     authorization: str = Header(None)
 ):
-    """Update meal plan - used to assign meals to days"""
     user = await get_current_user(authorization)
     
-    await db.meal_plans.update_one(
-        {"id": plan_id, "user_id": user["id"]},
-        {"$set": updates}
-    )
+    await update_meal_plan(plan_id, user["id"], updates)
     
     return {"message": "Meal plan updated"}
 
@@ -1114,20 +1215,16 @@ async def regenerate_meal_plan(
     regen_data: RegenerateRequest,
     authorization: str = Header(None)
 ):
-    """Regenerate meal plan with AI using user's allergies and extra restrictions"""
     user = await get_current_user(authorization)
     
-    # Get existing plan
-    plan = await db.meal_plans.find_one({"id": plan_id, "user_id": user["id"]}, {"_id": 0})
+    plan = await find_meal_plan_by_id(plan_id, user["id"])
     if not plan:
         raise HTTPException(status_code=404, detail="Meal plan not found")
     
-    # Get AI config
-    ai_config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
+    ai_config = await find_ai_config(user["id"])
     if not ai_config or not ai_config.get("api_key"):
         raise HTTPException(status_code=400, detail="Please configure your AI API key in Profile first")
     
-    # Build allergies list
     user_allergies = user.get("allergies", [])
     all_restrictions = list(user_allergies)
     if regen_data.extra_restriction:
@@ -1154,9 +1251,8 @@ async def regenerate_meal_plan(
         goal_context = f"Goal: {goal_map.get(goal, 'balanced nutrition')}\n"
     
     try:
-        chat = LlmChat(
-            api_key=ai_config["api_key"]
-        ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
+        import json
+        model = ai_config.get("model", "gpt-5.2")
         
         prompt = f"""Generate a complete 7-day weekly meal plan with DETAILED recipes.
 
@@ -1199,10 +1295,8 @@ Respond ONLY with valid JSON in this exact format:
   ]
 }}"""
         
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = await call_openai(ai_config["api_key"], prompt, None, model)
         
-        # Parse AI response
-        import json
         response_text = response if isinstance(response, str) else str(response)
         start_idx = response_text.find('{')
         end_idx = response_text.rfind('}') + 1
@@ -1243,13 +1337,9 @@ Respond ONLY with valid JSON in this exact format:
                         
                         plan_days[i]["instructions"]["snack"] = ""
         
-        # Update the plan
-        await db.meal_plans.update_one(
-            {"id": plan_id, "user_id": user["id"]},
-            {"$set": {"days": plan_days}}
-        )
+        await update_meal_plan(plan_id, user["id"], {"days": plan_days})
         
-        updated_plan = await db.meal_plans.find_one({"id": plan_id, "user_id": user["id"]}, {"_id": 0})
+        updated_plan = await find_meal_plan_by_id(plan_id, user["id"])
         return MealPlan(**updated_plan)
         
     except Exception as e:
@@ -1258,35 +1348,27 @@ Respond ONLY with valid JSON in this exact format:
 
 # ============== Shopping List Routes ==============
 
-# Category mapping for common ingredients
 INGREDIENT_CATEGORIES = {
-    # Proteins
     "chicken": "Proteins", "beef": "Proteins", "pork": "Proteins", "fish": "Proteins",
     "salmon": "Proteins", "tuna": "Proteins", "shrimp": "Proteins", "turkey": "Proteins",
     "egg": "Proteins", "eggs": "Proteins", "tofu": "Proteins", "tempeh": "Proteins",
-    # Dairy
     "milk": "Dairy", "cheese": "Dairy", "yogurt": "Dairy", "butter": "Dairy",
     "cream": "Dairy", "feta": "Dairy", "parmesan": "Dairy", "mozzarella": "Dairy",
-    # Produce
     "spinach": "Produce", "lettuce": "Produce", "tomato": "Produce", "onion": "Produce",
     "garlic": "Produce", "pepper": "Produce", "carrot": "Produce", "broccoli": "Produce",
     "cucumber": "Produce", "avocado": "Produce", "lemon": "Produce", "lime": "Produce",
     "apple": "Produce", "banana": "Produce", "berry": "Produce", "berries": "Produce",
     "mushroom": "Produce", "zucchini": "Produce", "potato": "Produce", "sweet potato": "Produce",
-    # Grains
     "rice": "Grains & Bread", "pasta": "Grains & Bread", "bread": "Grains & Bread",
     "oats": "Grains & Bread", "quinoa": "Grains & Bread", "tortilla": "Grains & Bread",
-    # Pantry
-    "oil": "Pantry", "olive oil": "Pantry", "salt": "Pantry", "pepper": "Pantry",
+    "oil": "Pantry", "olive oil": "Pantry", "salt": "Pantry",
     "sugar": "Pantry", "flour": "Pantry", "honey": "Pantry", "vinegar": "Pantry",
     "soy sauce": "Pantry", "sauce": "Pantry", "broth": "Pantry", "stock": "Pantry",
-    # Nuts & Seeds
     "almond": "Nuts & Seeds", "walnut": "Nuts & Seeds", "peanut": "Nuts & Seeds",
     "cashew": "Nuts & Seeds", "seed": "Nuts & Seeds", "nut": "Nuts & Seeds",
 }
 
 def categorize_ingredient(ingredient_name: str) -> str:
-    """Determine category based on ingredient name"""
     name_lower = ingredient_name.lower()
     for keyword, category in INGREDIENT_CATEGORIES.items():
         if keyword in name_lower:
@@ -1294,10 +1376,8 @@ def categorize_ingredient(ingredient_name: str) -> str:
     return "Other"
 
 def parse_ingredient_string(ingredient_str: str) -> dict:
-    """Parse ingredient string like '2 cups spinach' into structured data"""
     import re
     
-    # Common patterns: "2 cups spinach", "1/2 cup milk", "1 tbsp olive oil"
     pattern = r'^([\d\/\.\s]+)?\s*(cups?|tbsp|tsp|oz|lb|g|kg|ml|l|bunch|cloves?|pieces?|slices?|cans?|bottles?|packages?|stalks?)?\s*(.+)$'
     match = re.match(pattern, ingredient_str.strip(), re.IGNORECASE)
     
@@ -1306,7 +1386,6 @@ def parse_ingredient_string(ingredient_str: str) -> dict:
         unit = match.group(2) or "unit"
         name = match.group(3) or ingredient_str
         
-        # Parse quantity (handle fractions)
         try:
             if '/' in quantity_str:
                 parts = quantity_str.strip().split()
@@ -1341,22 +1420,19 @@ def parse_ingredient_string(ingredient_str: str) -> dict:
 async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    plan = await db.meal_plans.find_one({"id": meal_plan_id, "user_id": user["id"]}, {"_id": 0})
+    plan = await find_meal_plan_by_id(meal_plan_id, user["id"])
     if not plan:
         raise HTTPException(status_code=404, detail="Meal plan not found")
     
-    # Get servings multiplier
     servings = plan.get("servings", 1)
     
     all_ingredients = {}
     
-    # Extract ingredients from meal plan recipes
     for day in plan.get("days", []):
         recipes = day.get("recipes", {})
         is_leftover = day.get("is_leftover", {})
         
         for meal_type in ["breakfast", "lunch", "dinner", "snack"]:
-            # Skip leftover meals - they don't need new ingredients
             if is_leftover.get(meal_type, False):
                 continue
                 
@@ -1364,7 +1440,6 @@ async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True
             ingredients_list = recipe.get("ingredients", [])
             
             for ingredient in ingredients_list:
-                # Handle both string and dict formats
                 if isinstance(ingredient, str):
                     parsed = parse_ingredient_string(ingredient)
                 elif isinstance(ingredient, dict):
@@ -1377,7 +1452,6 @@ async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True
                 else:
                     continue
                 
-                # Aggregate by name + unit
                 key = f"{parsed['name'].lower()}_{parsed['unit']}"
                 if key in all_ingredients:
                     all_ingredients[key]["quantity"] += parsed["quantity"]
@@ -1392,37 +1466,30 @@ async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True
                         "pantry_has": 0
                     }
     
-    # Subtract pantry items if enabled
     if subtract_pantry:
-        pantry_items = await db.pantry.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+        pantry_items = await find_pantry_by_user(user["id"])
         
         for pantry_item in pantry_items:
             pantry_name = pantry_item["name"].lower()
             pantry_unit = pantry_item["unit"].lower()
             pantry_qty = pantry_item["quantity"]
             
-            # Try to match with shopping list items
             for key in list(all_ingredients.keys()):
                 item = all_ingredients[key]
                 item_name = item["name"].lower()
                 
-                # Check if pantry item name is in shopping item name or vice versa
                 if pantry_name in item_name or item_name in pantry_name:
-                    # Same or compatible units
                     if pantry_unit == item["unit"].lower() or pantry_unit in item["unit"].lower():
                         item["in_pantry"] = True
                         item["pantry_has"] = pantry_qty
                         
-                        # Subtract what we have
                         new_qty = item["quantity"] - pantry_qty
                         if new_qty <= 0:
-                            # We have enough, remove from list but mark it
                             item["quantity"] = 0
-                            item["checked"] = True  # Auto-check items we already have
+                            item["checked"] = True
                         else:
                             item["quantity"] = new_qty
     
-    # Round quantities for cleaner display and filter out zero quantity items
     final_items = []
     for key in all_ingredients:
         item = all_ingredients[key]
@@ -1434,7 +1501,6 @@ async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True
                 item["quantity"] = round(qty, 2)
             final_items.append(item)
         elif item.get("in_pantry"):
-            # Keep items we have in pantry but mark as checked
             item["quantity"] = 0
             final_items.append(item)
     
@@ -1444,27 +1510,26 @@ async def generate_shopping_list(meal_plan_id: str, subtract_pantry: bool = True
         "user_id": user["id"],
         "meal_plan_id": meal_plan_id,
         "items": final_items,
-        "servings": servings,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.shopping_lists.insert_one(list_doc)
+    await insert_shopping_list(list_doc)
     return ShoppingList(**list_doc)
 
 @api_router.get("/shopping-lists", response_model=List[ShoppingList])
 async def get_shopping_lists(authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    lists = await db.shopping_lists.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    lists = await find_shopping_lists_by_user(user["id"])
     return [ShoppingList(**lst) for lst in lists]
 
 @api_router.delete("/shopping-lists/{list_id}")
-async def delete_shopping_list(list_id: str, authorization: str = Header(None)):
+async def delete_shopping_list_route(list_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    result = await db.shopping_lists.delete_one({"id": list_id, "user_id": user["id"]})
+    result = await delete_shopping_list(list_id, user["id"])
     
-    if result.deleted_count == 0:
+    if result == 0:
         raise HTTPException(status_code=404, detail="Shopping list not found")
     
     return {"message": "Shopping list deleted"}
@@ -1477,7 +1542,7 @@ PANTRY_CATEGORIES = ["Spices", "Oils & Vinegars", "Grains & Pasta", "Canned Good
 async def get_pantry(authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    items = await db.pantry.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    items = await find_pantry_by_user(user["id"])
     return items
 
 @api_router.post("/pantry")
@@ -1499,65 +1564,72 @@ async def add_pantry_item(item_data: PantryItemCreate, authorization: str = Head
         "updated_at": now
     }
     
-    await db.pantry.insert_one(item_doc)
+    await insert_pantry_item(item_doc)
     return {"id": item_id, **item_data.model_dump()}
 
 @api_router.put("/pantry/{item_id}")
-async def update_pantry_item(item_id: str, updates: Dict[str, Any], authorization: str = Header(None)):
+async def update_pantry_item_route(item_id: str, updates: Dict[str, Any], authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     
-    result = await db.pantry.update_one(
-        {"id": item_id, "user_id": user["id"]},
-        {"$set": updates}
-    )
+    result = await update_pantry_item(item_id, user["id"], updates)
     
-    if result.matched_count == 0:
+    if result == 0:
         raise HTTPException(status_code=404, detail="Pantry item not found")
     
     return {"message": "Pantry item updated"}
 
 @api_router.delete("/pantry/{item_id}")
-async def delete_pantry_item(item_id: str, authorization: str = Header(None)):
+async def delete_pantry_item_route(item_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    result = await db.pantry.delete_one({"id": item_id, "user_id": user["id"]})
+    result = await delete_pantry_item(item_id, user["id"])
     
-    if result.deleted_count == 0:
+    if result == 0:
         raise HTTPException(status_code=404, detail="Pantry item not found")
     
     return {"message": "Pantry item deleted"}
 
 @api_router.post("/pantry/use")
 async def use_pantry_item(data: Dict[str, Any], authorization: str = Header(None)):
-    """Deduct quantity from pantry item after shopping/cooking"""
     user = await get_current_user(authorization)
     
     item_id = data.get("item_id")
     amount = data.get("amount", 0)
     
-    item = await db.pantry.find_one({"id": item_id, "user_id": user["id"]}, {"_id": 0})
+    item = await find_pantry_item(item_id, user["id"])
     if not item:
         raise HTTPException(status_code=404, detail="Pantry item not found")
     
     new_quantity = max(0, item["quantity"] - amount)
     
-    await db.pantry.update_one(
-        {"id": item_id, "user_id": user["id"]},
-        {"$set": {"quantity": new_quantity, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
+    await update_pantry_item(item_id, user["id"], {"quantity": new_quantity, "updated_at": datetime.now(timezone.utc).isoformat()})
     
     return {"message": "Pantry updated", "new_quantity": new_quantity}
 
 # ============== Supplement Routes ==============
 
+def _normalize_supplement(supp: dict) -> dict:
+    benefits = supp.get("benefits") or {}
+    warnings = supp.get("warnings") or {}
+    return {
+        "id": supp.get("id"),
+        "name": supp.get("name"),
+        "purpose": supp.get("description"),
+        "typical_dose_min": benefits.get("typical_dose_min") if isinstance(benefits, dict) else None,
+        "typical_dose_max": benefits.get("typical_dose_max") if isinstance(benefits, dict) else None,
+        "dose_unit": supp.get("dosage"),
+        "warnings": warnings.get("warnings") if isinstance(warnings, dict) else None,
+        "interactions": warnings.get("interactions") if isinstance(warnings, dict) else None
+    }
+
 @api_router.get("/supplements", response_model=List[Supplement])
 async def get_supplements(authorization: str = Header(None)):
     await get_current_user(authorization)
     
-    supplements = await db.supplements.find({}, {"_id": 0}).to_list(1000)
-    return [Supplement(**supp) for supp in supplements]
+    supplements = await find_all_supplements()
+    return [Supplement(**_normalize_supplement(supp)) for supp in supplements]
 
 @api_router.post("/supplements", response_model=Supplement)
 async def create_supplement(supp_data: SupplementCreate, authorization: str = Header(None)):
@@ -1569,14 +1641,30 @@ async def create_supplement(supp_data: SupplementCreate, authorization: str = He
         **supp_data.model_dump()
     }
     
-    await db.supplements.insert_one(supp_doc)
+    await insert_supplement(supp_doc)
     return Supplement(**supp_doc)
+
+def _normalize_user_supplement(supp: dict) -> dict:
+    return {
+        "id": supp.get("id"),
+        "user_id": supp.get("user_id"),
+        "supplement_id": supp.get("supplement_id"),
+        "supplement_name": supp.get("supplement_name", ""),
+        "custom_dose": supp.get("dosage") or 0,
+        "dose_unit": "unit",
+        "frequency": supp.get("frequency") or "",
+        "timing": [supp.get("time_of_day")] if supp.get("time_of_day") else [],
+        "stock_quantity": 0,
+        "expiration_date": supp.get("notes"),
+        "reminder_enabled": supp.get("active", True),
+        "created_at": supp.get("created_at") or ""
+    }
 
 @api_router.post("/user-supplements", response_model=UserSupplement)
 async def add_user_supplement(supp_data: UserSupplementCreate, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    supplement = await db.supplements.find_one({"id": supp_data.supplement_id}, {"_id": 0})
+    supplement = await find_supplement_by_id(supp_data.supplement_id)
     if not supplement:
         raise HTTPException(status_code=404, detail="Supplement not found")
     
@@ -1589,39 +1677,46 @@ async def add_user_supplement(supp_data: UserSupplementCreate, authorization: st
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.user_supplements.insert_one(user_supp_doc)
+    await insert_user_supplement(user_supp_doc)
     return UserSupplement(**user_supp_doc)
 
 @api_router.get("/user-supplements", response_model=List[UserSupplement])
 async def get_user_supplements(authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    supps = await db.user_supplements.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
-    return [UserSupplement(**supp) for supp in supps]
+    supps = await find_user_supplements(user["id"])
+    return [UserSupplement(**_normalize_user_supplement(supp)) for supp in supps]
 
 @api_router.put("/user-supplements/{supp_id}")
-async def update_user_supplement(
+async def update_user_supplement_route(
     supp_id: str,
     updates: Dict[str, Any],
     authorization: str = Header(None)
 ):
     user = await get_current_user(authorization)
     
-    await db.user_supplements.update_one(
-        {"id": supp_id, "user_id": user["id"]},
-        {"$set": updates}
-    )
+    await update_user_supplement(supp_id, user["id"], updates)
     
     return {"message": "Supplement updated"}
 
 @api_router.delete("/user-supplements/{supp_id}")
-async def delete_user_supplement(supp_id: str, authorization: str = Header(None)):
+async def delete_user_supplement_route(supp_id: str, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    await db.user_supplements.delete_one({"id": supp_id, "user_id": user["id"]})
+    await delete_user_supplement(supp_id, user["id"])
     return {"message": "Supplement deleted"}
 
 # ============== Supplement Log Routes ==============
+
+def _normalize_supplement_log(log: dict) -> dict:
+    return {
+        "id": log.get("id"),
+        "user_id": log.get("user_id"),
+        "user_supplement_id": log.get("user_supplement_id"),
+        "dose_taken": 0,
+        "taken_at": log.get("taken_at") or "",
+        "notes": log.get("notes")
+    }
 
 @api_router.post("/supplement-logs", response_model=SupplementLog)
 async def log_supplement(log_data: SupplementLogCreate, authorization: str = Header(None)):
@@ -1635,15 +1730,15 @@ async def log_supplement(log_data: SupplementLogCreate, authorization: str = Hea
         "taken_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.supplement_logs.insert_one(log_doc)
+    await insert_supplement_log(log_doc)
     return SupplementLog(**log_doc)
 
 @api_router.get("/supplement-logs", response_model=List[SupplementLog])
 async def get_supplement_logs(authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    logs = await db.supplement_logs.find({"user_id": user["id"]}, {"_id": 0}).sort("taken_at", -1).to_list(1000)
-    return [SupplementLog(**log) for log in logs]
+    logs = await find_supplement_logs(user["id"])
+    return [SupplementLog(**_normalize_supplement_log(log)) for log in logs]
 
 # ============== AI Supplement Recommendations ==============
 
@@ -1652,15 +1747,13 @@ async def ai_recommend_supplements(
     goal: str,
     authorization: str = Header(None)
 ):
-    """AI-powered supplement recommendations based on health goals"""
     user = await get_current_user(authorization)
     
-    ai_config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
+    ai_config = await find_ai_config(user["id"])
     if not ai_config or not ai_config.get("api_key"):
         raise HTTPException(status_code=400, detail="AI configuration required. Please add API key in Profile settings.")
     
-    # Get all available supplements
-    all_supplements = await db.supplements.find({}, {"_id": 0}).to_list(1000)
+    all_supplements = await find_all_supplements()
     supp_names = [s["name"] for s in all_supplements]
     
     goal_map = {
@@ -1679,11 +1772,8 @@ async def ai_recommend_supplements(
     goal_description = goal_map.get(goal, "general wellness")
     
     try:
-        chat = LlmChat(
-            api_key=ai_config["api_key"],
-            session_id=f"supp_recommend_{user['id']}",
-            system_message="You are an expert nutritionist and supplement advisor. Recommend evidence-based supplements."
-        ).with_model(ai_config.get("provider", "openai"), ai_config.get("model", "gpt-5.2"))
+        system_message = "You are an expert nutritionist and supplement advisor. Recommend evidence-based supplements."
+        model = ai_config.get("model", "gpt-5.2")
         
         prompt = f"""Based on the health goal of "{goal_description}", recommend 5-8 supplements from this list:
 {', '.join(supp_names)}
@@ -1706,7 +1796,7 @@ Format as JSON:
   ]
 }}"""
         
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = await call_openai(ai_config["api_key"], prompt, system_message, model)
         
         return {
             "goal": goal,
@@ -1720,10 +1810,10 @@ Format as JSON:
 # ============== AI Config Routes ==============
 
 @api_router.get("/ai-config")
-async def get_ai_config(authorization: str = Header(None)):
+async def get_ai_config_route(authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
-    config = await db.ai_configs.find_one({"user_id": user["id"]}, {"_id": 0})
+    config = await find_ai_config(user["id"])
     if not config:
         config_id = str(uuid.uuid4())
         config_doc = {
@@ -1733,20 +1823,13 @@ async def get_ai_config(authorization: str = Header(None)):
             "model": "gpt-5.2",
             "api_key": None
         }
-        await db.ai_configs.insert_one(config_doc)
-        # Return without _id
-        config = {
-            "id": config_id,
-            "user_id": user["id"],
-            "provider": "openai",
-            "model": "gpt-5.2",
-            "api_key": None
-        }
+        await insert_ai_config(config_doc)
+        config = config_doc
     
     return config
 
 @api_router.put("/ai-config")
-async def update_ai_config(config_data: AIConfigUpdate, authorization: str = Header(None)):
+async def update_ai_config_route(config_data: AIConfigUpdate, authorization: str = Header(None)):
     user = await get_current_user(authorization)
     
     update_data = {
@@ -1754,65 +1837,51 @@ async def update_ai_config(config_data: AIConfigUpdate, authorization: str = Hea
         "model": config_data.model
     }
     
-    # Only update api_key if a new one is provided (not masked)
     if config_data.api_key and config_data.api_key != "********":
         update_data["api_key"] = config_data.api_key
     
-    # Check if config exists
-    existing = await db.ai_configs.find_one({"user_id": user["id"]})
+    existing = await find_ai_config(user["id"])
     
     if existing:
-        await db.ai_configs.update_one(
-            {"user_id": user["id"]},
-            {"$set": update_data}
-        )
+        await update_ai_config(user["id"], update_data)
     else:
         config_id = str(uuid.uuid4())
         update_data["id"] = config_id
         update_data["user_id"] = user["id"]
-        await db.ai_configs.insert_one(update_data)
+        await insert_ai_config(update_data)
     
     return {"message": "AI configuration updated"}
 
 # ============== Subscription Routes ==============
 
-# Initialize Stripe with API key
-stripe.api_key = os.environ.get('STRIPE_API_KEY')
-
-# Stripe Price IDs for recurring subscriptions
-# These should be created in Stripe Dashboard or via API
 STRIPE_PRICES = {
     "monthly": {
-        "amount": 999,  # $9.99 in cents
+        "amount": 999,
         "interval": "month",
         "name": "Monthly Premium"
     },
     "yearly": {
-        "amount": 9999,  # $99.99 in cents
+        "amount": 9999,
         "interval": "year",
         "name": "Yearly Premium"
     }
 }
 
 async def get_or_create_stripe_price(package_id: str) -> str:
-    """Get existing price or create new one for subscription"""
     package = STRIPE_PRICES.get(package_id)
     if not package:
         raise HTTPException(status_code=400, detail="Invalid package")
     
-    # Check if we have a cached price ID
-    cached_price = await db.stripe_prices.find_one({"package_id": package_id}, {"_id": 0})
+    cached_price = await find_stripe_price(package_id)
     if cached_price:
-        return cached_price["price_id"]
+        return cached_price["stripe_price_id"]
     
     try:
-        # Create a product first
         product = stripe.Product.create(
             name=f"Conqueror's Court {package['name']}",
             description=f"Premium subscription - {package['name']}"
         )
         
-        # Create recurring price
         price = stripe.Price.create(
             product=product.id,
             unit_amount=package["amount"],
@@ -1820,12 +1889,13 @@ async def get_or_create_stripe_price(package_id: str) -> str:
             recurring={"interval": package["interval"]}
         )
         
-        # Cache the price ID
-        await db.stripe_prices.insert_one({
+        await insert_stripe_price({
+            "id": str(uuid.uuid4()),
             "package_id": package_id,
             "price_id": price.id,
             "product_id": product.id,
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "amount": package["amount"],
+            "interval": package["interval"]
         })
         
         return price.id
@@ -1835,21 +1905,17 @@ async def get_or_create_stripe_price(package_id: str) -> str:
 
 @api_router.post("/subscriptions/checkout")
 async def create_checkout(checkout_req: CheckoutRequest, authorization: str = Header(None)):
-    """Create Stripe Checkout session for recurring subscription"""
     user = await get_current_user(authorization)
     
     if checkout_req.package_id not in STRIPE_PRICES:
         raise HTTPException(status_code=400, detail="Invalid package")
     
     try:
-        # Get or create the recurring price
         price_id = await get_or_create_stripe_price(checkout_req.package_id)
         
-        # Check if user already has a Stripe customer ID
         stripe_customer_id = user.get("stripe_customer_id")
         
         if not stripe_customer_id:
-            # Create Stripe customer
             customer = stripe.Customer.create(
                 email=user["email"],
                 name=user.get("name", ""),
@@ -1857,13 +1923,8 @@ async def create_checkout(checkout_req: CheckoutRequest, authorization: str = He
             )
             stripe_customer_id = customer.id
             
-            # Save customer ID to user
-            await db.users.update_one(
-                {"id": user["id"]},
-                {"$set": {"stripe_customer_id": stripe_customer_id}}
-            )
+            await update_user(user["id"], {"stripe_customer_id": stripe_customer_id})
         
-        # Create checkout session for subscription
         success_url = f"{checkout_req.origin_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{checkout_req.origin_url}/subscription"
         
@@ -1883,7 +1944,6 @@ async def create_checkout(checkout_req: CheckoutRequest, authorization: str = He
             }
         )
         
-        # Record the transaction
         transaction_doc = {
             "id": str(uuid.uuid4()),
             "user_id": user["id"],
@@ -1895,7 +1955,7 @@ async def create_checkout(checkout_req: CheckoutRequest, authorization: str = He
             "subscription_mode": True,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
-        await db.payment_transactions.insert_one(transaction_doc)
+        await insert_payment_transaction(transaction_doc)
         
         return {"url": session.url, "session_id": session.id}
         
@@ -1905,40 +1965,27 @@ async def create_checkout(checkout_req: CheckoutRequest, authorization: str = He
 
 @api_router.get("/subscriptions/status/{session_id}")
 async def check_subscription_status(session_id: str, authorization: str = Header(None)):
-    """Check the status of a checkout session"""
     user = await get_current_user(authorization)
     
     try:
         session = stripe.checkout.Session.retrieve(session_id)
         
-        transaction = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+        transaction = await find_payment_transaction(session_id)
         
-        # If subscription is active and not yet processed
         if session.status == "complete" and session.payment_status == "paid":
             if transaction and transaction["payment_status"] != "completed":
-                # Get subscription details
                 subscription = stripe.Subscription.retrieve(session.subscription)
                 
-                # Update user subscription
-                await db.users.update_one(
-                    {"id": user["id"]},
-                    {"$set": {
-                        "subscription_status": "active",
-                        "subscription_id": session.subscription,
-                        "subscription_end_date": datetime.fromtimestamp(
-                            subscription.current_period_end, tz=timezone.utc
-                        ).isoformat()
-                    }}
-                )
+                await update_user(user["id"], {
+                    "subscription_status": "active",
+                    "subscription_end_date": datetime.fromtimestamp(
+                        subscription.current_period_end, tz=timezone.utc
+                    ).isoformat()
+                })
                 
-                # Update transaction
-                await db.payment_transactions.update_one(
-                    {"session_id": session_id},
-                    {"$set": {
-                        "payment_status": "completed",
-                        "subscription_id": session.subscription
-                    }}
-                )
+                await update_payment_transaction(session_id, {
+                    "payment_status": "completed"
+                })
         
         return {
             "status": session.status,
@@ -1953,7 +2000,6 @@ async def check_subscription_status(session_id: str, authorization: str = Header
 
 @api_router.post("/subscriptions/cancel")
 async def cancel_subscription(authorization: str = Header(None)):
-    """Cancel user's active subscription"""
     user = await get_current_user(authorization)
     
     subscription_id = user.get("subscription_id")
@@ -1961,16 +2007,12 @@ async def cancel_subscription(authorization: str = Header(None)):
         raise HTTPException(status_code=400, detail="No active subscription found")
     
     try:
-        # Cancel at period end (user keeps access until end of billing period)
         subscription = stripe.Subscription.modify(
             subscription_id,
             cancel_at_period_end=True
         )
         
-        await db.users.update_one(
-            {"id": user["id"]},
-            {"$set": {"subscription_cancel_at_period_end": True}}
-        )
+        await update_user(user["id"], {"subscription_cancel_at_period_end": True})
         
         return {
             "message": "Subscription will be cancelled at the end of the billing period",
@@ -1983,7 +2025,6 @@ async def cancel_subscription(authorization: str = Header(None)):
 
 @api_router.get("/subscriptions/details")
 async def get_subscription_details(authorization: str = Header(None)):
-    """Get user's subscription details"""
     user = await get_current_user(authorization)
     
     subscription_id = user.get("subscription_id")
@@ -2014,7 +2055,7 @@ async def get_subscription_details(authorization: str = Header(None)):
 
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhook events for subscription lifecycle"""
+    import json
     body = await request.body()
     signature = request.headers.get("Stripe-Signature")
     webhook_secret = os.environ.get('STRIPE_WEBHOOK_SECRET')
@@ -2023,8 +2064,6 @@ async def stripe_webhook(request: Request):
         if webhook_secret:
             event = stripe.Webhook.construct_event(body, signature, webhook_secret)
         else:
-            # For testing without webhook secret
-            import json
             event = stripe.Event.construct_from(json.loads(body), stripe.api_key)
         
         event_type = event.type
@@ -2033,23 +2072,17 @@ async def stripe_webhook(request: Request):
         logging.info(f"Stripe webhook received: {event_type}")
         
         if event_type == "checkout.session.completed":
-            # Initial subscription created
             user_id = data.metadata.get("user_id")
             if user_id and data.subscription:
                 subscription = stripe.Subscription.retrieve(data.subscription)
-                await db.users.update_one(
-                    {"id": user_id},
-                    {"$set": {
-                        "subscription_status": "active",
-                        "subscription_id": data.subscription,
-                        "subscription_end_date": datetime.fromtimestamp(
-                            subscription.current_period_end, tz=timezone.utc
-                        ).isoformat()
-                    }}
-                )
+                await update_user(user_id, {
+                    "subscription_status": "active",
+                    "subscription_end_date": datetime.fromtimestamp(
+                        subscription.current_period_end, tz=timezone.utc
+                    ).isoformat()
+                })
         
         elif event_type == "invoice.paid":
-            # Recurring payment successful
             subscription_id = data.subscription
             if subscription_id:
                 subscription = stripe.Subscription.retrieve(subscription_id)
@@ -2057,43 +2090,31 @@ async def stripe_webhook(request: Request):
                 user_id = customer.metadata.get("user_id")
                 
                 if user_id:
-                    await db.users.update_one(
-                        {"id": user_id},
-                        {"$set": {
-                            "subscription_status": "active",
-                            "subscription_end_date": datetime.fromtimestamp(
-                                subscription.current_period_end, tz=timezone.utc
-                            ).isoformat()
-                        }}
-                    )
+                    await update_user(user_id, {
+                        "subscription_status": "active",
+                        "subscription_end_date": datetime.fromtimestamp(
+                            subscription.current_period_end, tz=timezone.utc
+                        ).isoformat()
+                    })
         
         elif event_type == "invoice.payment_failed":
-            # Payment failed
             subscription_id = data.subscription
             if subscription_id:
                 customer = stripe.Customer.retrieve(data.customer)
                 user_id = customer.metadata.get("user_id")
                 
                 if user_id:
-                    await db.users.update_one(
-                        {"id": user_id},
-                        {"$set": {"subscription_status": "past_due"}}
-                    )
+                    await update_user(user_id, {"subscription_status": "past_due"})
         
         elif event_type == "customer.subscription.deleted":
-            # Subscription cancelled
             customer = stripe.Customer.retrieve(data.customer)
             user_id = customer.metadata.get("user_id")
             
             if user_id:
-                await db.users.update_one(
-                    {"id": user_id},
-                    {"$set": {
-                        "subscription_status": "inactive",
-                        "subscription_id": None,
-                        "subscription_end_date": None
-                    }}
-                )
+                await update_user(user_id, {
+                    "subscription_status": "inactive",
+                    "subscription_end_date": None
+                })
         
         return {"status": "success"}
         
@@ -2126,10 +2147,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.on_event("startup")
-async def startup_event():
-    await seed_supplements()
+FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "frontend" / "build"
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+if FRONTEND_BUILD_DIR.exists():
+    app.mount("/static", StaticFiles(directory=FRONTEND_BUILD_DIR / "static"), name="static")
+    
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API route not found")
+        file_path = FRONTEND_BUILD_DIR / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(FRONTEND_BUILD_DIR / "index.html")

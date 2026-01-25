@@ -12,18 +12,29 @@ function SocialAuthButtons() {
     apple: false,
     facebook: false
   });
+  const [googleClientId, setGoogleClientId] = useState(null);
 
   useEffect(() => {
-    // Check which OAuth providers are configured
+    // Check which OAuth providers are configured and get Google client ID
     axios.get(`${API}/auth/oauth/status`)
-      .then(response => setOauthStatus(response.data))
+      .then(response => {
+        setOauthStatus(response.data);
+        if (response.data.google_client_id) {
+          setGoogleClientId(response.data.google_client_id);
+        }
+      })
       .catch(error => console.error('Failed to check OAuth status:', error));
   }, []);
 
   const handleGoogleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/auth/callback';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    if (!googleClientId) {
+      console.error('Google OAuth not configured');
+      return;
+    }
+    const redirectUri = window.location.origin + '/api/auth/google-callback';
+    const scope = 'openid email profile';
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+    window.location.href = googleAuthUrl;
   };
 
   const handleAppleLogin = () => {
